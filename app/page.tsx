@@ -1,8 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
+/* ─── Tipos ─────────────────────────────── */
+type MsgRole = 'bot' | 'user'
+interface Msg { id: number; role: MsgRole; text: string; typing?: boolean }
+
+type InputMode =
+  | { type: 'text';    placeholder: string; multiline?: boolean }
+  | { type: 'sectors' }
+  | { type: 'tonos' }
+  | { type: 'confirm' }
+  | { type: 'skip';    placeholder: string }
+  | { type: 'done' }
+
+interface Step {
+  botMsg:  string
+  field:   keyof Form | null
+  input:   InputMode
+  next?:   (val: string, form: Form) => string   // mensaje de confirmación bot
+}
+
+/* ─── Datos ─────────────────────────────── */
 const SECTORES = [
   { label: 'Gestoría / Asesoría',       icon: '📊' },
   { label: 'Restaurante / Bar',          icon: '🍽️' },
@@ -17,633 +37,555 @@ const SECTORES = [
   { label: 'Gimnasio / Deportes',        icon: '💪' },
   { label: 'Otro',                       icon: '💼' },
 ]
-
 const TONOS = [
-  { value: 'cercano',     label: 'Cercano',     desc: 'Natural y real',        emoji: '👋' },
-  { value: 'profesional', label: 'Profesional', desc: 'Serio y directo',       emoji: '💼' },
-  { value: 'divertido',   label: 'Divertido',   desc: 'Con chispa y energía',  emoji: '🎯' },
+  { value: 'cercano',     label: 'Cercano',     emoji: '👋', desc: 'Natural y directo' },
+  { value: 'profesional', label: 'Profesional', emoji: '💼', desc: 'Serio y formal'   },
+  { value: 'divertido',   label: 'Divertido',   emoji: '🎯', desc: 'Con energía'      },
 ]
 
-export default function OnboardingPage() {
-  const router = useRouter()
-  const [step, setStep] = useState(0)
+/* ─── Pasos del chat ─────────────────────── */
+const STEPS: Step[] = [
+  {
+    botMsg: '¡Hola! Soy Captia ⚡\n\nEn menos de 2 minutos te configuro para recibir clientes automáticamente.\n\n¿Cómo se llama tu negocio?',
+    field:  'nombre',
+    input:  { type: 'text', placeholder: 'Ej: Marsof Technology' },
+    next:   (v) => `Genial, **${v}**. ¿En qué sector trabajáis?`,
+  },
+  {
+    botMsg: '', // se rellena con next del anterior
+    field:  'sector',
+    input:  { type: 'sectors' },
+    next:   (v) => `Perfecto. Ahora cuéntame qué hacéis exactamente en ${v}. Sé concreto — así los emails serán más naturales.`,
+  },
+  {
+    botMsg: '',
+    field:  'descripcion',
+    input:  { type: 'text', placeholder: 'Ej: Hacemos páginas web y apps para negocios locales. Nos especializamos en tiendas online.', multiline: true },
+    next:   () => '¿En qué ciudad queréis buscar clientes?',
+  },
+  {
+    botMsg: '',
+    field:  'ciudad',
+    input:  { type: 'text', placeholder: 'Ej: Madrid, Sevilla, Huelva...' },
+    next:   (v) => `Buscaremos en **${v}**. ¿Y quién es vuestro cliente ideal? ¿Qué tipo de negocios?`,
+  },
+  {
+    botMsg: '',
+    field:  'cliente_ideal',
+    input:  { type: 'text', placeholder: 'Ej: Gestorías que necesiten digitalizar su negocio', multiline: true },
+    next:   () => '¿Cómo quieres que suenen los emails que envía la IA?',
+  },
+  {
+    botMsg: '',
+    field:  'tono',
+    input:  { type: 'tonos' },
+    next:   (v, f) => `Emails en tono **${v}**, perfecto.\n\n¿A qué email te mando las respuestas de los clientes?`,
+  },
+  {
+    botMsg: '',
+    field:  'email',
+    input:  { type: 'text', placeholder: 'tu@empresa.com' },
+    next:   () => '¿Tienes WhatsApp donde avisarte cuando alguien responda? (puedes saltar esto)',
+  },
+  {
+    botMsg: '',
+    field:  'telefono',
+    input:  { type: 'skip', placeholder: '612 345 678' },
+    next:   (v) => v
+      ? `Perfecto, te aviso en el **${v}**.\n\n¡Ya tengo todo lo que necesito! ¿Activamos Captia?`
+      : '¡Ya tengo todo lo que necesito! ¿Activamos Captia? 🚀',
+  },
+  {
+    botMsg: '',
+    field:  null,
+    input:  { type: 'done' },
+  },
+]
+
+/* ─── Form types ─────────────────────────── */
+interface Form {
+  nombre: string; sector: string; descripcion: string
+  ciudad: string; cliente_ideal: string; tono: string
+  email: string;  telefono: string
+}
+
+/* ─── Helpers ────────────────────────────── */
+let msgId = 0
+const newMsg = (role: MsgRole, text: string, typing = false): Msg =>
+  ({ id: ++msgId, role, text, typing })
+
+/* ─── Componente principal ───────────────── */
+export default function ChatOnboarding() {
+  const router  = useRouter()
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef  = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
+
+  const [msgs,     setMsgs]     = useState<Msg[]>([])
+  const [step,     setStep]     = useState(0)
+  const [input,    setInput]    = useState('')
+  const [botTyping, setBotTyping] = useState(false)
   const [guardando, setGuardando] = useState(false)
-  const [form, setForm] = useState({
+  const [form,     setForm]     = useState<Form>({
     nombre: '', sector: '', descripcion: '', ciudad: '',
     cliente_ideal: '', tono: 'cercano', email: '', telefono: '',
   })
 
-  const guardar = async () => {
+  /* Scroll al fondo en cada mensaje nuevo */
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [msgs, botTyping])
+
+  /* Mensaje inicial */
+  useEffect(() => {
+    setTimeout(() => {
+      setBotTyping(true)
+      setTimeout(() => {
+        setBotTyping(false)
+        setMsgs([newMsg('bot', STEPS[0].botMsg)])
+      }, 1200)
+    }, 400)
+  }, [])
+
+  /* ── Enviar respuesta del usuario ── */
+  const sendAnswer = (value: string, displayValue?: string) => {
+    if (!value.trim() && STEPS[step].input.type !== 'skip') return
+    const display = displayValue || value
+
+    // Mensaje del usuario
+    const userMsg = newMsg('user', display || '(sin teléfono)')
+    setMsgs(prev => [...prev, userMsg])
+
+    // Actualizar form
+    const field = STEPS[step].field
+    const newForm = field ? { ...form, [field]: value } : form
+    if (field) setForm(newForm)
+    setInput('')
+
+    // Mostrar siguiente mensaje del bot
+    const currentStep = STEPS[step]
+    const nextStepIdx = step + 1
+    if (nextStepIdx >= STEPS.length) return
+
+    const botText = currentStep.next?.(value, newForm) || STEPS[nextStepIdx].botMsg
+
+    setBotTyping(true)
+    const delay = botText.length > 80 ? 1400 : 900
+    setTimeout(() => {
+      setBotTyping(false)
+      setMsgs(prev => [...prev, newMsg('bot', botText)])
+      setStep(nextStepIdx)
+      setTimeout(() => (inputRef.current as HTMLElement)?.focus(), 100)
+    }, delay)
+  }
+
+  /* ── Activar Captia ── */
+  const activar = async () => {
     setGuardando(true)
+    setMsgs(prev => [...prev, newMsg('bot', '⚡ Configurando tu cuenta...')])
     try {
-      const res = await fetch('/api/negocio', {
+      const res  = await fetch('/api/negocio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
       const data = await res.json()
       if (data.id) router.push(`/dashboard?id=${data.id}`)
-    } finally {
+    } catch {
+      setMsgs(prev => [...prev, newMsg('bot', '❌ Algo falló. Recarga la página e inténtalo de nuevo.')])
       setGuardando(false)
     }
   }
 
-  const canNext0 = form.nombre && form.sector && form.descripcion
-  const canNext1 = form.ciudad && form.cliente_ideal
-  const canNext2 = form.email
+  const currentInput = STEPS[step]?.input
 
+  /* ── Render ── */
   return (
     <>
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #05050a; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; background: #05050a; }
 
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-12px); }
-        }
-        @keyframes pulse-ring {
-          0% { transform: scale(1); opacity: 0.4; }
-          100% { transform: scale(1.6); opacity: 0; }
-        }
-        @keyframes gradient-shift {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes spin    { to { transform: rotate(360deg); } }
+        @keyframes fadeUp  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes blink   { 0%,80%,100% { opacity:0; } 40% { opacity:1; } }
+        @keyframes float   { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); } }
+        @keyframes glow-pulse { 0%,100% { opacity:.15; } 50% { opacity:.28; } }
 
-        .captia-root {
-          min-height: 100vh;
+        .root {
+          height: 100dvh;
+          display: flex; flex-direction: column;
           background: #05050a;
-          display: flex;
-          flex-direction: column;
-          position: relative;
-          overflow: hidden;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          position: relative; overflow: hidden;
         }
 
-        /* ── Fondo animado ── */
-        .bg-glow-1 {
-          position: fixed; top: -200px; left: -100px;
-          width: 700px; height: 700px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 65%);
-          pointer-events: none; z-index: 0;
+        /* Fondos */
+        .bg-blob {
+          position: fixed; border-radius: 50%; pointer-events: none; z-index: 0;
+          animation: glow-pulse 6s ease-in-out infinite;
         }
-        .bg-glow-2 {
-          position: fixed; bottom: -300px; right: -100px;
-          width: 800px; height: 800px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(79,70,229,0.12) 0%, transparent 65%);
-          pointer-events: none; z-index: 0;
-        }
-        .bg-glow-3 {
-          position: fixed; top: 40%; left: 35%;
-          width: 400px; height: 400px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 65%);
-          pointer-events: none; z-index: 0;
-        }
+        .bg-blob-1 { width:600px; height:600px; top:-200px; left:-150px;
+          background: radial-gradient(circle, rgba(124,58,237,.22) 0%, transparent 65%); }
+        .bg-blob-2 { width:500px; height:500px; bottom:-200px; right:-100px;
+          background: radial-gradient(circle, rgba(79,70,229,.14) 0%, transparent 65%); }
         .bg-grid {
-          position: fixed; inset: 0; z-index: 0; pointer-events: none;
+          position:fixed; inset:0; z-index:0; pointer-events:none;
           background-image:
-            linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-          background-size: 60px 60px;
+            linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+            linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+          background-size: 52px 52px;
         }
 
-        /* ── Header ── */
+        /* Header */
         .header {
-          display: flex; align-items: center; padding: 18px 40px;
-          border-bottom: 1px solid rgba(255,255,255,0.05);
-          position: relative; z-index: 10;
-          background: rgba(5,5,10,0.8);
-          backdrop-filter: blur(12px);
+          display: flex; align-items: center; gap: 10px;
+          padding: 16px 24px;
+          border-bottom: 1px solid rgba(255,255,255,.06);
+          background: rgba(5,5,10,.85);
+          backdrop-filter: blur(16px);
+          position: relative; z-index: 10; flex-shrink: 0;
         }
-        .logo-icon {
-          width: 36px; height: 36px; background: linear-gradient(135deg, #7c3aed, #4f46e5);
-          border-radius: 10px; display: flex; align-items: center; justify-content: center;
-          font-size: 17px; box-shadow: 0 0 24px rgba(124,58,237,0.5), 0 0 48px rgba(124,58,237,0.15);
-          animation: float 4s ease-in-out infinite;
+        .logo-box {
+          width: 34px; height: 34px;
+          background: linear-gradient(135deg, #7c3aed, #4f46e5);
+          border-radius: 9px; display: flex; align-items: center;
+          justify-content: center; font-size: 16px;
+          box-shadow: 0 0 18px rgba(124,58,237,.55);
+          animation: float 3.5s ease-in-out infinite;
+          flex-shrink: 0;
         }
-        .logo-text {
-          font-size: 19px; font-weight: 800; color: #fff;
-          letter-spacing: -0.5px; margin-left: 10px;
-        }
-        .header-tag {
-          margin-left: 16px; font-size: 12px; color: #52525b;
-          border-left: 1px solid #27272a; padding-left: 16px;
-        }
+        .logo-name { font-size: 17px; font-weight: 800; color: #fff; letter-spacing: -.4px; }
+        .header-sep { width: 1px; height: 18px; background: rgba(255,255,255,.1); margin: 0 4px; }
+        .header-tag { font-size: 12px; color: #52525b; }
         .header-badge {
           margin-left: auto;
           display: inline-flex; align-items: center; gap: 6px;
-          background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.2);
-          border-radius: 99px; padding: 5px 14px; font-size: 11px;
-          color: #a78bfa; font-weight: 600; letter-spacing: 0.5px;
+          background: rgba(124,58,237,.1); border: 1px solid rgba(124,58,237,.22);
+          border-radius: 99px; padding: 4px 12px;
+          font-size: 11px; color: #a78bfa; font-weight: 600;
         }
-        .header-dot {
+        .live-dot {
           width: 6px; height: 6px; border-radius: 50%;
-          background: #22c55e;
-          box-shadow: 0 0 8px rgba(34,197,94,0.6);
+          background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.7);
         }
 
-        /* ── Layout ── */
-        .main-layout {
-          flex: 1; display: flex; position: relative; z-index: 1;
+        /* Chat área */
+        .chat-area {
+          flex: 1; overflow-y: auto; padding: 28px 0; position: relative; z-index: 1;
+          scroll-behavior: smooth;
+        }
+        .chat-area::-webkit-scrollbar { width: 4px; }
+        .chat-area::-webkit-scrollbar-track { background: transparent; }
+        .chat-area::-webkit-scrollbar-thumb { background: #27272a; border-radius: 99px; }
+
+        .chat-inner {
+          max-width: 720px; margin: 0 auto; padding: 0 20px;
+          display: flex; flex-direction: column; gap: 16px;
         }
 
-        /* ── Panel izquierdo ── */
-        .left-panel {
-          flex: 1; padding: 64px 72px;
-          display: flex; flex-direction: column; justify-content: center;
-          border-right: 1px solid rgba(255,255,255,0.05);
-        }
-        .pill {
-          display: inline-flex; align-items: center; gap: 8px;
-          background: rgba(124,58,237,0.10); border: 1px solid rgba(124,58,237,0.22);
-          border-radius: 99px; padding: 6px 16px; margin-bottom: 32px;
-          animation: fade-in-up 0.5s ease both;
-        }
-        .pill-dot {
-          width: 6px; height: 6px; border-radius: 50%;
-          background: #a78bfa; position: relative;
-        }
-        .pill-dot::after {
-          content: ''; position: absolute; inset: -2px;
-          border-radius: 50%; background: rgba(167,139,250,0.4);
-          animation: pulse-ring 1.5s ease-out infinite;
-        }
-        .pill span { font-size: 11px; color: #a78bfa; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }
+        /* Burbujas */
+        .bubble-row { display: flex; gap: 10px; animation: fadeUp .35s ease both; }
+        .bubble-row.user  { flex-direction: row-reverse; }
 
-        .hero-title {
-          font-size: 52px; font-weight: 900; color: #fff;
-          line-height: 1.1; margin-bottom: 20px; letter-spacing: -2px;
-          animation: fade-in-up 0.5s 0.1s ease both;
+        .avatar {
+          width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+          background: linear-gradient(135deg, #7c3aed, #4f46e5);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 14px;
+          box-shadow: 0 0 12px rgba(124,58,237,.4);
+          margin-top: 2px;
         }
-        .hero-title .gradient-text {
-          background: linear-gradient(135deg, #a78bfa 0%, #818cf8 50%, #c084fc 100%);
-          background-size: 200% 200%;
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-          background-clip: text;
-          animation: gradient-shift 4s ease infinite;
-        }
-        .hero-sub {
-          font-size: 16px; color: #71717a; line-height: 1.75; max-width: 460px;
-          margin-bottom: 52px;
-          animation: fade-in-up 0.5s 0.2s ease both;
+        .avatar.user-av {
+          background: linear-gradient(135deg, #27272a, #3f3f46);
+          box-shadow: none; font-size: 13px;
         }
 
-        .features-list {
-          display: flex; flex-direction: column; gap: 24px;
-          animation: fade-in-up 0.5s 0.3s ease both;
+        .bubble {
+          max-width: 78%; padding: 12px 16px;
+          border-radius: 18px; font-size: 14px; line-height: 1.65;
+          white-space: pre-line;
         }
-        .feature-item {
-          display: flex; gap: 16px; align-items: flex-start;
-          padding: 16px 20px;
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.05);
-          border-radius: 14px;
-          transition: all 0.2s;
+        .bubble.bot {
+          background: rgba(255,255,255,.04);
+          border: 1px solid rgba(255,255,255,.07);
+          color: #e4e4e7;
+          border-top-left-radius: 4px;
         }
-        .feature-item:hover {
-          background: rgba(124,58,237,0.05);
-          border-color: rgba(124,58,237,0.18);
-          transform: translateX(4px);
-        }
-        .feature-icon {
-          width: 42px; height: 42px; flex-shrink: 0;
-          background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(79,70,229,0.10));
-          border: 1px solid rgba(124,58,237,0.2);
-          border-radius: 12px; display: flex; align-items: center; justify-content: center;
-          font-size: 19px;
-        }
-        .feature-title { font-size: 14px; font-weight: 600; color: #e4e4e7; margin-bottom: 3px; }
-        .feature-desc  { font-size: 12px; color: #52525b; line-height: 1.55; }
-
-        .stats-row {
-          display: flex; gap: 0; margin-top: 48px; padding-top: 40px;
-          border-top: 1px solid rgba(255,255,255,0.05);
-          animation: fade-in-up 0.5s 0.4s ease both;
-        }
-        .stat-item { flex: 1; text-align: center; }
-        .stat-item:not(:last-child) { border-right: 1px solid rgba(255,255,255,0.05); }
-        .stat-num {
-          font-size: 28px; font-weight: 900; letter-spacing: -1px;
-          background: linear-gradient(135deg, #a78bfa, #818cf8);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .stat-label { font-size: 11px; color: #3f3f46; margin-top: 2px; }
-
-        /* ── Panel derecho ── */
-        .right-panel {
-          width: 540px; flex-shrink: 0;
-          padding: 40px 52px;
-          display: flex; flex-direction: column; justify-content: center;
-          background: rgba(255,255,255,0.015);
+        .bubble.bot strong { color: #a78bfa; font-weight: 600; }
+        .bubble.user {
+          background: linear-gradient(135deg, #7c3aed, #6d28d9);
+          color: #fff; border-top-right-radius: 4px;
+          box-shadow: 0 4px 16px rgba(124,58,237,.3);
         }
 
-        /* Progress */
-        .progress-bar {
-          display: flex; gap: 6px; margin-bottom: 36px;
+        /* Typing indicator */
+        .typing-row { display: flex; gap: 10px; animation: fadeUp .25s ease both; }
+        .typing-bubble {
+          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+          border-radius: 18px; border-top-left-radius: 4px;
+          padding: 14px 18px; display: flex; gap: 5px; align-items: center;
         }
-        .progress-segment {
-          flex: 1; height: 3px; border-radius: 99px;
-          background: #1c1c24;
-          transition: background 0.5s;
-          overflow: hidden; position: relative;
+        .dot {
+          width: 7px; height: 7px; border-radius: 50%; background: #52525b;
+          animation: blink 1.4s ease-in-out infinite;
         }
-        .progress-segment.active::after {
-          content: '';
-          position: absolute; inset: 0;
-          background: linear-gradient(90deg, #7c3aed, #a78bfa);
-          border-radius: 99px;
-        }
+        .dot:nth-child(2) { animation-delay: .2s; }
+        .dot:nth-child(3) { animation-delay: .4s; }
 
-        /* Card */
-        .step-card {
-          background: rgba(255,255,255,0.025);
-          border: 1px solid rgba(255,255,255,0.07);
-          border-radius: 22px; padding: 32px 28px;
-          backdrop-filter: blur(10px);
-          box-shadow: 0 0 0 1px rgba(124,58,237,0.05), 0 24px 48px rgba(0,0,0,0.4);
-          animation: fade-in-up 0.35s ease both;
+        /* Zona de input */
+        .input-zone {
+          border-top: 1px solid rgba(255,255,255,.06);
+          background: rgba(5,5,10,.9); backdrop-filter: blur(16px);
+          padding: 16px 20px 20px; position: relative; z-index: 10;
+          flex-shrink: 0;
         }
-        .step-label {
-          font-size: 10px; font-weight: 700; color: #7c3aed;
-          letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px;
-        }
-        .step-title { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 6px; letter-spacing: -0.5px; }
-        .step-sub   { font-size: 13px; color: #52525b; margin-bottom: 28px; line-height: 1.5; }
+        .input-inner { max-width: 720px; margin: 0 auto; }
 
-        /* Inputs */
-        .field-label {
-          display: block; font-size: 11px; font-weight: 600;
-          color: #71717a; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+        /* Input de texto */
+        .text-form { display: flex; gap: 10px; align-items: flex-end; }
+        .text-input {
+          flex: 1; background: rgba(255,255,255,.04);
+          border: 1px solid rgba(255,255,255,.1);
+          border-radius: 14px; padding: 13px 16px;
+          font-size: 14px; color: #f4f4f5; font-family: inherit;
+          outline: none; resize: none; transition: all .2s;
+          line-height: 1.5;
         }
-        .field-input {
-          width: 100%; background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 12px; padding: 12px 16px;
-          font-size: 14px; color: #f4f4f5;
-          outline: none; transition: all 0.2s;
-          font-family: inherit;
+        .text-input::placeholder { color: #3f3f46; }
+        .text-input:focus {
+          border-color: rgba(124,58,237,.5);
+          background: rgba(124,58,237,.04);
+          box-shadow: 0 0 0 3px rgba(124,58,237,.12);
         }
-        .field-input::placeholder { color: #3f3f46; }
-        .field-input:focus {
-          border-color: rgba(124,58,237,0.5);
-          background: rgba(124,58,237,0.04);
-          box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+        .send-btn {
+          width: 44px; height: 44px; border-radius: 12px; border: none;
+          background: linear-gradient(135deg, #7c3aed, #6d28d9);
+          color: #fff; font-size: 18px; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: all .2s; flex-shrink: 0;
+          box-shadow: 0 4px 14px rgba(124,58,237,.4);
         }
-        .field-group { margin-bottom: 18px; }
+        .send-btn:hover:not(:disabled) {
+          transform: scale(1.07);
+          box-shadow: 0 6px 20px rgba(124,58,237,.55);
+        }
+        .send-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
 
-        /* Sectores grid */
-        .sectores-grid {
-          display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 18px;
+        /* Grid de sectores */
+        .sectors-grid {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
         }
         .sector-btn {
           padding: 10px 8px; border-radius: 11px; cursor: pointer;
-          transition: all 0.15s; display: flex; flex-direction: column; gap: 5px;
-          border: 1px solid rgba(255,255,255,0.06);
-          background: rgba(255,255,255,0.02);
-          text-align: left;
-        }
-        .sector-btn:hover { border-color: rgba(124,58,237,0.35); background: rgba(124,58,237,0.06); }
-        .sector-btn.selected {
-          border-color: #7c3aed !important;
-          background: rgba(124,58,237,0.14) !important;
-          box-shadow: 0 0 0 1px rgba(124,58,237,0.3), inset 0 1px 0 rgba(167,139,250,0.1);
-        }
-        .sector-emoji { font-size: 18px; line-height: 1; }
-        .sector-label { font-size: 10px; font-weight: 500; line-height: 1.3; color: #71717a; }
-        .sector-btn.selected .sector-label { color: #c4b5fd; }
-
-        /* Tono grid */
-        .tonos-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
-        .tono-btn {
-          padding: 14px 10px; border-radius: 12px; cursor: pointer;
-          border: 1px solid rgba(255,255,255,0.06);
-          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,.07);
+          background: rgba(255,255,255,.03);
           display: flex; flex-direction: column; align-items: center; gap: 5px;
-          transition: all 0.15s;
+          transition: all .15s; font-family: inherit;
         }
-        .tono-btn:hover { border-color: rgba(124,58,237,0.35); background: rgba(124,58,237,0.06); }
-        .tono-btn.selected {
-          border-color: #7c3aed !important;
-          background: rgba(124,58,237,0.14) !important;
-          box-shadow: 0 0 0 1px rgba(124,58,237,0.3);
-        }
-        .tono-emoji { font-size: 22px; }
-        .tono-name { font-size: 12px; font-weight: 700; color: #a1a1aa; }
-        .tono-btn.selected .tono-name { color: #c4b5fd; }
-        .tono-desc { font-size: 10px; color: #3f3f46; text-align: center; line-height: 1.4; }
-
-        /* Summary items */
-        .summary-item {
-          display: flex; gap: 14px; align-items: flex-start;
-          padding: 13px 16px; border-radius: 12px;
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.05);
-          margin-bottom: 10px;
-          transition: all 0.2s;
-        }
-        .summary-item:hover { border-color: rgba(124,58,237,0.2); background: rgba(124,58,237,0.04); }
-        .summary-emoji { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
-        .summary-title { font-size: 13px; font-weight: 600; color: #e4e4e7; }
-        .summary-desc  { font-size: 11px; color: #52525b; margin-top: 2px; line-height: 1.4; }
-
-        /* Buttons */
-        .btn-primary {
-          width: 100%; padding: 14px; border-radius: 13px; border: none;
-          background: linear-gradient(135deg, #7c3aed, #6d28d9);
-          color: #fff; font-size: 14px; font-weight: 700;
-          cursor: pointer; transition: all 0.2s; letter-spacing: -0.2px;
-          box-shadow: 0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.1) inset;
-          display: flex; align-items: center; justify-content: center; gap: 8px;
-          font-family: inherit;
-        }
-        .btn-primary:hover:not(:disabled) {
-          background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-          box-shadow: 0 6px 28px rgba(124,58,237,0.55), 0 1px 0 rgba(255,255,255,0.1) inset;
+        .sector-btn:hover {
+          border-color: rgba(124,58,237,.4);
+          background: rgba(124,58,237,.08);
           transform: translateY(-1px);
         }
-        .btn-primary:disabled {
-          background: #1c1c24; color: #3f3f46; cursor: not-allowed;
-          box-shadow: none; transform: none;
-        }
-        .btn-back {
-          padding: 14px 18px; border-radius: 13px;
-          background: transparent; border: 1px solid rgba(255,255,255,0.08);
-          color: #52525b; font-size: 13px; cursor: pointer;
-          transition: all 0.2s; font-family: inherit;
-        }
-        .btn-back:hover { border-color: rgba(255,255,255,0.15); color: #a1a1aa; }
-        .btn-row { display: flex; gap: 10px; }
-        .btn-row .btn-primary { flex: 1; width: auto; }
+        .s-emoji { font-size: 20px; line-height: 1; }
+        .s-label { font-size: 10px; color: #71717a; font-weight: 500; text-align: center; line-height: 1.3; }
 
-        .footer-text {
-          text-align: center; font-size: 11px; color: #27272a; margin-top: 22px;
-          letter-spacing: 0.3px;
+        /* Tonos */
+        .tonos-row { display: flex; gap: 10px; }
+        .tono-btn {
+          flex: 1; padding: 14px 10px; border-radius: 13px; cursor: pointer;
+          border: 1px solid rgba(255,255,255,.07);
+          background: rgba(255,255,255,.03);
+          display: flex; flex-direction: column; align-items: center; gap: 5px;
+          transition: all .15s; font-family: inherit;
         }
+        .tono-btn:hover {
+          border-color: rgba(124,58,237,.4);
+          background: rgba(124,58,237,.08);
+          transform: translateY(-1px);
+        }
+        .t-emoji { font-size: 24px; }
+        .t-name  { font-size: 13px; font-weight: 700; color: #e4e4e7; }
+        .t-desc  { font-size: 10px; color: #52525b; text-align: center; }
 
-        /* Spinner */
+        /* Skip */
+        .skip-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+        .skip-btn {
+          padding: 12px 18px; border-radius: 12px;
+          border: 1px solid rgba(255,255,255,.08);
+          background: transparent; color: #52525b;
+          font-size: 13px; cursor: pointer; transition: all .2s; font-family: inherit;
+          white-space: nowrap; flex-shrink: 0;
+        }
+        .skip-btn:hover { border-color: rgba(255,255,255,.18); color: #a1a1aa; }
+
+        /* CTA final */
+        .cta-btn {
+          width: 100%; padding: 16px; border-radius: 14px; border: none;
+          background: linear-gradient(135deg, #7c3aed, #6d28d9);
+          color: #fff; font-size: 16px; font-weight: 800; cursor: pointer;
+          transition: all .2s; font-family: inherit; letter-spacing: -.3px;
+          box-shadow: 0 6px 28px rgba(124,58,237,.45), inset 0 1px 0 rgba(255,255,255,.12);
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .cta-btn:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 36px rgba(124,58,237,.6), inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        .cta-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
         .spinner {
-          width: 15px; height: 15px; border-radius: 50%;
-          border: 2px solid rgba(255,255,255,0.2);
+          width: 16px; height: 16px; border-radius: 50%;
+          border: 2.5px solid rgba(255,255,255,.25);
           border-top-color: #fff;
-          animation: spin 0.6s linear infinite;
+          animation: spin .65s linear infinite;
         }
 
-        @media (max-width: 960px) {
-          .left-panel { display: none; }
-          .right-panel { width: 100%; padding: 32px 24px; }
-          .hero-title { font-size: 36px; }
-          .header { padding: 16px 24px; }
-          .header-tag { display: none; }
+        @media (max-width: 600px) {
+          .sectors-grid { grid-template-columns: repeat(3,1fr); }
+          .header-badge { display: none; }
         }
       `}</style>
 
-      <div className="captia-root">
-        {/* Fondo */}
-        <div className="bg-glow-1" />
-        <div className="bg-glow-2" />
-        <div className="bg-glow-3" />
+      <div className="root">
+        <div className="bg-blob bg-blob-1" />
+        <div className="bg-blob bg-blob-2" />
         <div className="bg-grid" />
 
-        {/* Header */}
+        {/* ── Header ── */}
         <header className="header">
-          <div className="logo-icon">⚡</div>
-          <span className="logo-text">Captia</span>
+          <div className="logo-box">⚡</div>
+          <span className="logo-name">Captia</span>
+          <div className="header-sep" />
           <span className="header-tag">Clientes automáticos para tu negocio</span>
           <div className="header-badge">
-            <span className="header-dot" />
-            100% Gratis · Sin tarjeta
+            <span className="live-dot" />
+            100% Gratis
           </div>
         </header>
 
-        {/* Layout */}
-        <div className="main-layout">
+        {/* ── Chat ── */}
+        <div className="chat-area">
+          <div className="chat-inner">
 
-          {/* ── Columna izquierda ── */}
-          <div className="left-panel">
-            <div style={{ maxWidth: 500 }}>
-              <div className="pill">
-                <span className="pill-dot" />
-                <span>Nuevo · IA para ventas locales</span>
+            {msgs.map(m => (
+              <div key={m.id} className={`bubble-row ${m.role}`}>
+                <div className={`avatar ${m.role === 'user' ? 'user-av' : ''}`}>
+                  {m.role === 'bot' ? '⚡' : '👤'}
+                </div>
+                <div
+                  className={`bubble ${m.role}`}
+                  dangerouslySetInnerHTML={{
+                    __html: m.text
+                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/\n/g, '<br/>')
+                  }}
+                />
               </div>
+            ))}
 
-              <h1 className="hero-title">
-                Consigue clientes<br />
-                <span className="gradient-text">mientras duermes</span>
-              </h1>
-
-              <p className="hero-sub">
-                Captia escanea tu ciudad, encuentra negocios que pueden comprarte,
-                les escribe emails con IA y hace el seguimiento por ti.<br />
-                <strong style={{ color: '#e4e4e7' }}>Tú solo cierras los tratos.</strong>
-              </p>
-
-              <div className="features-list">
-                {[
-                  { icon: '🔍', title: 'Búsqueda automática de clientes',  desc: 'Encuentra negocios locales usando OpenStreetMap y scraping inteligente. Sin pagar APIs.' },
-                  { icon: '✉️', title: 'Emails únicos generados por IA',   desc: 'Gemini escribe cada email adaptado al negocio destino. Nada de plantillas copiadas.' },
-                  { icon: '🔁', title: 'Seguimiento sin esfuerzo',          desc: 'A los 4 días envía follow-up automático. A los 11 días, otro. Tú no tocas nada.' },
-                  { icon: '📱', title: 'Alertas en tiempo real',             desc: 'Email + WhatsApp cuando alguien responda. Reacciona en segundos, no en días.' },
-                ].map(f => (
-                  <div className="feature-item" key={f.title}>
-                    <div className="feature-icon">{f.icon}</div>
-                    <div>
-                      <div className="feature-title">{f.title}</div>
-                      <div className="feature-desc">{f.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="stats-row">
-                {[
-                  { num: '+200', label: 'Negocios contactados' },
-                  { num: '68%',  label: 'Tasa de apertura' },
-                  { num: '< 5m', label: 'Para empezar' },
-                ].map(s => (
-                  <div className="stat-item" key={s.label}>
-                    <div className="stat-num">{s.num}</div>
-                    <div className="stat-label">{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Columna derecha ── */}
-          <div className="right-panel">
-
-            {/* Progress */}
-            <div className="progress-bar">
-              {[0,1,2,3].map(i => (
-                <div key={i} className={`progress-segment ${i <= step ? 'active' : ''}`} />
-              ))}
-            </div>
-
-            {/* ── Paso 0 ── */}
-            {step === 0 && (
-              <div className="step-card">
-                <div className="step-label">Paso 1 de 4</div>
-                <h2 className="step-title">¿A qué te dedicas?</h2>
-                <p className="step-sub">La IA necesita entender tu negocio para buscar los clientes correctos.</p>
-
-                <div className="field-group">
-                  <label className="field-label">Nombre del negocio</label>
-                  <input className="field-input" type="text" autoFocus
-                    placeholder="Ej: Clínica Dental Martínez"
-                    value={form.nombre}
-                    onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} />
-                </div>
-
-                <div className="field-group">
-                  <label className="field-label">Sector</label>
-                  <div className="sectores-grid">
-                    {SECTORES.map(s => (
-                      <button key={s.label}
-                        className={`sector-btn ${form.sector === s.label ? 'selected' : ''}`}
-                        onClick={() => setForm(f => ({ ...f, sector: s.label }))}>
-                        <span className="sector-emoji">{s.icon}</span>
-                        <span className="sector-label">{s.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="field-group">
-                  <label className="field-label">¿Qué haces exactamente?</label>
-                  <textarea className="field-input" rows={2} style={{ resize: 'none' }}
-                    placeholder="Ej: Somos una clínica dental en Madrid. Hacemos ortodoncia, implantes y revisiones."
-                    value={form.descripcion}
-                    onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} />
-                </div>
-
-                <button className="btn-primary" disabled={!canNext0} onClick={() => setStep(1)}>
-                  Continuar →
-                </button>
-              </div>
-            )}
-
-            {/* ── Paso 1 ── */}
-            {step === 1 && (
-              <div className="step-card">
-                <div className="step-label">Paso 2 de 4</div>
-                <h2 className="step-title">¿A quién le vendes?</h2>
-                <p className="step-sub">Cuanto más concreto seas, mejor encontrará la IA.</p>
-
-                <div className="field-group">
-                  <label className="field-label">Ciudad donde buscamos clientes</label>
-                  <input className="field-input" type="text" autoFocus
-                    placeholder="Ej: Madrid, Sevilla, Huelva..."
-                    value={form.ciudad}
-                    onChange={e => setForm(f => ({ ...f, ciudad: e.target.value }))} />
-                </div>
-
-                <div className="field-group">
-                  <label className="field-label">¿Quién es tu cliente ideal?</label>
-                  <textarea className="field-input" rows={3} style={{ resize: 'none' }}
-                    placeholder="Ej: Restaurantes y hoteles de Madrid que necesiten proveedor de vinos."
-                    value={form.cliente_ideal}
-                    onChange={e => setForm(f => ({ ...f, cliente_ideal: e.target.value }))} />
-                </div>
-
-                <div className="field-group">
-                  <label className="field-label">Tono de los emails</label>
-                  <div className="tonos-grid">
-                    {TONOS.map(t => (
-                      <button key={t.value}
-                        className={`tono-btn ${form.tono === t.value ? 'selected' : ''}`}
-                        onClick={() => setForm(f => ({ ...f, tono: t.value }))}>
-                        <span className="tono-emoji">{t.emoji}</span>
-                        <span className="tono-name">{t.label}</span>
-                        <span className="tono-desc">{t.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="btn-row">
-                  <button className="btn-back" onClick={() => setStep(0)}>← Atrás</button>
-                  <button className="btn-primary" disabled={!canNext1} onClick={() => setStep(2)}>
-                    Continuar →
-                  </button>
+            {botTyping && (
+              <div className="typing-row">
+                <div className="avatar">⚡</div>
+                <div className="typing-bubble">
+                  <span className="dot" /><span className="dot" /><span className="dot" />
                 </div>
               </div>
             )}
 
-            {/* ── Paso 2 ── */}
-            {step === 2 && (
-              <div className="step-card">
-                <div className="step-label">Paso 3 de 4</div>
-                <h2 className="step-title">¿Cómo te avisamos?</h2>
-                <p className="step-sub">Te notificamos cuando alguien responda.</p>
-
-                <div className="field-group">
-                  <label className="field-label">Tu email</label>
-                  <input className="field-input" type="email" autoFocus
-                    placeholder="tu@empresa.com"
-                    value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-                  <p style={{ fontSize: 11, color: '#3f3f46', marginTop: 6 }}>Los clientes responderán a este email</p>
-                </div>
-
-                <div className="field-group">
-                  <label className="field-label">Teléfono <span style={{ color: '#27272a', fontWeight: 400, textTransform: 'none' }}>(opcional — avisos WhatsApp)</span></label>
-                  <input className="field-input" type="tel"
-                    placeholder="612 345 678"
-                    value={form.telefono}
-                    onChange={e => setForm(f => ({ ...f, telefono: e.target.value }))} />
-                </div>
-
-                <div className="btn-row">
-                  <button className="btn-back" onClick={() => setStep(1)}>← Atrás</button>
-                  <button className="btn-primary" disabled={!canNext2} onClick={() => setStep(3)}>
-                    Continuar →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── Paso 3 ── */}
-            {step === 3 && (
-              <div className="step-card">
-                <div className="step-label">Paso 4 de 4</div>
-                <h2 className="step-title">Todo listo 🚀</h2>
-                <p className="step-sub">Esto es lo que hará Captia por ti:</p>
-
-                {[
-                  { icon: '🔍', title: 'Busca negocios',           desc: `Encuentra clientes en ${form.ciudad} vía OpenStreetMap` },
-                  { icon: '✉️', title: 'Escribe y manda emails',   desc: `IA redacta cada email en tono ${form.tono}` },
-                  { icon: '🔁', title: 'Seguimiento automático',   desc: 'Reenvía si no responden a los 4 y 11 días' },
-                  { icon: '📱', title: 'Te avisa al instante',     desc: `Notificación a ${form.email}` },
-                ].map(item => (
-                  <div className="summary-item" key={item.title}>
-                    <span className="summary-emoji">{item.icon}</span>
-                    <div>
-                      <div className="summary-title">{item.title}</div>
-                      <div className="summary-desc">{item.desc}</div>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="btn-row" style={{ marginTop: 24 }}>
-                  <button className="btn-back" onClick={() => setStep(2)}>← Atrás</button>
-                  <button className="btn-primary" disabled={guardando} onClick={guardar}
-                    style={{ opacity: guardando ? 0.8 : 1 }}>
-                    {guardando ? <><span className="spinner" />Configurando...</> : '⚡ Activar Captia'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <p className="footer-text">Completamente gratis · Sin tarjeta · Sin límites</p>
+            <div ref={bottomRef} />
           </div>
         </div>
+
+        {/* ── Input zone ── */}
+        {!botTyping && currentInput && (
+          <div className="input-zone">
+            <div className="input-inner">
+
+              {/* Texto / textarea */}
+              {(currentInput.type === 'text') && (
+                <form className="text-form" onSubmit={e => { e.preventDefault(); sendAnswer(input) }}>
+                  {currentInput.multiline ? (
+                    <textarea
+                      ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+                      className="text-input" rows={2}
+                      placeholder={currentInput.placeholder}
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAnswer(input) } }}
+                      autoFocus
+                    />
+                  ) : (
+                    <input
+                      ref={inputRef as React.RefObject<HTMLInputElement>}
+                      className="text-input" type="text"
+                      placeholder={currentInput.placeholder}
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      autoFocus
+                    />
+                  )}
+                  <button className="send-btn" type="submit" disabled={!input.trim()}>↑</button>
+                </form>
+              )}
+
+              {/* Sectores */}
+              {currentInput.type === 'sectors' && (
+                <div className="sectors-grid">
+                  {SECTORES.map(s => (
+                    <button key={s.label} className="sector-btn"
+                      onClick={() => sendAnswer(s.label, `${s.icon} ${s.label}`)}>
+                      <span className="s-emoji">{s.icon}</span>
+                      <span className="s-label">{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Tonos */}
+              {currentInput.type === 'tonos' && (
+                <div className="tonos-row">
+                  {TONOS.map(t => (
+                    <button key={t.value} className="tono-btn"
+                      onClick={() => sendAnswer(t.value, `${t.emoji} ${t.label}`)}>
+                      <span className="t-emoji">{t.emoji}</span>
+                      <span className="t-name">{t.label}</span>
+                      <span className="t-desc">{t.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Skip (teléfono opcional) */}
+              {currentInput.type === 'skip' && (
+                <form className="text-form skip-form" onSubmit={e => { e.preventDefault(); sendAnswer(input) }}>
+                  <input
+                    ref={inputRef as React.RefObject<HTMLInputElement>}
+                    className="text-input" type="tel"
+                    placeholder={currentInput.placeholder}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    autoFocus
+                  />
+                  <button className="send-btn" type="submit" disabled={!input.trim()}>↑</button>
+                  <button type="button" className="skip-btn"
+                    onClick={() => sendAnswer('', 'Sin teléfono por ahora')}>
+                    Saltar →
+                  </button>
+                </form>
+              )}
+
+              {/* Done — CTA */}
+              {currentInput.type === 'done' && (
+                <button className="cta-btn" disabled={guardando} onClick={activar}>
+                  {guardando
+                    ? <><span className="spinner" /> Configurando tu cuenta...</>
+                    : '⚡ Activar Captia — empezar a conseguir clientes'}
+                </button>
+              )}
+
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
