@@ -6,6 +6,22 @@ import { Resend } from 'resend'
 export const maxDuration = 60 // Vercel: permite hasta 60s para generar emails con IA
 
 const H = { 'Content-Type': 'application/json' }
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://captia.vercel.app'
+
+function buildEmailHtml(cuerpo: string, contactoId: string, negocioNombre: string): string {
+  const pixelId = crypto.randomUUID()
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#222">
+    ${cuerpo.replace(/\n/g, '<br/>')}
+    <br/><br/>
+    <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
+    <p style="font-size:11px;color:#999;text-align:center;line-height:1.6">
+      Este email fue enviado por ${negocioNombre}.<br/>
+      Si no deseas recibir más emails,
+      <a href="${BASE_URL}/api/baja?cid=${contactoId}" style="color:#bbb">haz clic aquí para darte de baja</a>.
+    </p>
+    <img src="${BASE_URL}/api/track?cid=${contactoId}&pid=${pixelId}" width="1" height="1" style="display:block;width:1px;height:1px;opacity:0" alt=""/>
+  </div>`
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +36,8 @@ export async function POST(req: NextRequest) {
     if (!negocio) return new Response(JSON.stringify({ error: 'Negocio no encontrado' }), { status: 404, headers: H })
 
     // Si se pasan IDs concretos usamos esos, si no los nuevos sin email enviado
-    let query = db.from('captia_contactos').select('*').eq('negocio_id', negocio_id)
+    // Nunca enviar a contactos con baja
+    let query = db.from('captia_contactos').select('*').eq('negocio_id', negocio_id).neq('estado', 'baja')
     if (contacto_ids?.length) {
       query = query.in('id', contacto_ids)
     } else {
@@ -47,15 +64,13 @@ export async function POST(req: NextRequest) {
           tono: negocio.tono,
         })
 
-        // Enviamos con Resend
+        // Enviamos con Resend (pixel de tracking + enlace de baja incluidos)
         const envioRes = await resend.emails.send({
           from: `${negocio.nombre} <captia@marsof.es>`,
           to: contacto.email_encontrado!,
           replyTo: negocio.email,
           subject: email.asunto,
-          html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #222;">
-            ${email.cuerpo.replace(/\n/g, '<br/>')}
-          </div>`,
+          html: buildEmailHtml(email.cuerpo, contacto.id, negocio.nombre),
         })
         if (envioRes.error) throw new Error(`Resend: ${JSON.stringify(envioRes.error)}`)
 

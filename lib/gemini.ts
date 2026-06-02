@@ -109,6 +109,42 @@ Devuelve SOLO un JSON con este formato exacto:
   }
 }
 
+/* ═══════════════════════════════════════════════════════
+   KEYWORD EXTRACTOR — convierte cliente_ideal en término OSM
+   ═══════════════════════════════════════════════════════ */
+export async function extraerKeywordBusqueda(clienteIdeal: string): Promise<string> {
+  const prompt = `Dado este perfil de cliente ideal: "${clienteIdeal}"
+
+Extrae UNA palabra clave corta (1-2 palabras máximo) que sirva como término de búsqueda para encontrar ese tipo de negocio en un directorio de empresas o en OpenStreetMap.
+
+Responde SOLO con la palabra clave, en minúsculas, sin explicación, sin puntos.
+
+Ejemplos:
+"Gestorías que necesiten digitalizar su negocio" → gestoría
+"Restaurantes y bares que quieran más reservas" → restaurante
+"Clínicas dentales independientes" → dentista
+"Hoteles boutique en zonas turísticas" → hotel
+"Empresas de fontanería y reformas del hogar" → fontanero
+"Farmacias y parafarmacias" → farmacia
+"Autónomos y pymes que quieran digitalizar" → empresa
+"Talleres mecánicos con múltiples empleados" → taller mecánico`
+
+  try {
+    const texto = await generarTexto(prompt)
+    return texto
+      .trim()
+      .toLowerCase()
+      .replace(/['".,\n→\-:]/g, '')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .join(' ')
+  } catch {
+    // Fallback: primera palabra del cliente_ideal
+    return clienteIdeal.split(/[\s,]+/)[0].toLowerCase().replace(/[^a-záéíóúñü]/gi, '').slice(0, 20)
+  }
+}
+
 export async function generarPostSocial(params: {
   negocio: string
   sector: string

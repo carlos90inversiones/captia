@@ -32,15 +32,17 @@ function av(name: string) {
 
 type Negocio = { id: string; nombre: string; sector: string; descripcion: string; ciudad: string; cliente_ideal: string; tono: string; email: string; telefono: string | null }
 type Contacto = { id: string; nombre: string; ciudad: string; sector: string; estado: string; telefono: string | null; web: string | null; email_encontrado: string | null; rating: number | null; ultimo_contacto: string | null }
-type Stats = { total: number; nuevos: number; email_enviado: number; seguimiento: number; respondio: number }
+type Stats = { total: number; nuevos: number; email_enviado: number; seguimiento: number; respondio: number; abiertos: number; bajas: number }
 
 const EC: Record<string, { label: string; bg: string; color: string; bc: string; dot: string }> = {
-  nuevo:         { label: 'Nuevo',         bg: 'rgba(113,113,122,.12)', color: '#a1a1aa', bc: 'rgba(113,113,122,.2)', dot: '#71717a' },
-  email_enviado: { label: 'Email enviado',  bg: 'rgba(59,130,246,.1)',   color: '#93c5fd', bc: 'rgba(59,130,246,.2)',  dot: '#3b82f6' },
-  seguimiento_1: { label: 'Seguimiento 1',  bg: 'rgba(245,158,11,.1)',   color: '#fcd34d', bc: 'rgba(245,158,11,.2)',  dot: '#f59e0b' },
-  seguimiento_2: { label: 'Seguimiento 2',  bg: 'rgba(249,115,22,.1)',   color: '#fdba74', bc: 'rgba(249,115,22,.2)',  dot: '#f97316' },
-  respondio:     { label: '✓ Respondió',    bg: 'rgba(16,185,129,.1)',   color: '#6ee7b7', bc: 'rgba(16,185,129,.2)',  dot: '#10b981' },
-  descartado:    { label: 'Descartado',     bg: 'rgba(239,68,68,.08)',   color: '#fca5a5', bc: 'rgba(239,68,68,.18)', dot: '#ef4444' },
+  nuevo:         { label: 'Nuevo',          bg: 'rgba(113,113,122,.12)', color: '#a1a1aa', bc: 'rgba(113,113,122,.2)',  dot: '#71717a' },
+  email_enviado: { label: 'Email enviado',   bg: 'rgba(59,130,246,.1)',   color: '#93c5fd', bc: 'rgba(59,130,246,.2)',   dot: '#3b82f6' },
+  abierto:       { label: '👁 Abrió email',  bg: 'rgba(14,165,233,.1)',   color: '#7dd3fc', bc: 'rgba(14,165,233,.2)',   dot: '#0ea5e9' },
+  seguimiento_1: { label: 'Seguimiento 1',   bg: 'rgba(245,158,11,.1)',   color: '#fcd34d', bc: 'rgba(245,158,11,.2)',   dot: '#f59e0b' },
+  seguimiento_2: { label: 'Seguimiento 2',   bg: 'rgba(249,115,22,.1)',   color: '#fdba74', bc: 'rgba(249,115,22,.2)',   dot: '#f97316' },
+  respondio:     { label: '✓ Respondió',     bg: 'rgba(16,185,129,.1)',   color: '#6ee7b7', bc: 'rgba(16,185,129,.2)',   dot: '#10b981' },
+  descartado:    { label: 'Descartado',      bg: 'rgba(239,68,68,.08)',   color: '#fca5a5', bc: 'rgba(239,68,68,.18)',  dot: '#ef4444' },
+  baja:          { label: 'Baja',            bg: 'rgba(113,113,122,.07)', color: '#52525b', bc: 'rgba(113,113,122,.12)', dot: '#3f3f46' },
 }
 
 /* ── SVG icons ── */
@@ -94,12 +96,12 @@ function DashboardInner() {
 
   const [negocio, setNegocio] = useState<Negocio | null>(null)
   const [contactos, setContactos] = useState<Contacto[]>([])
-  const [stats, setStats] = useState<Stats>({ total: 0, nuevos: 0, email_enviado: 0, seguimiento: 0, respondio: 0 })
+  const [stats, setStats] = useState<Stats>({ total: 0, nuevos: 0, email_enviado: 0, seguimiento: 0, respondio: 0, abiertos: 0, bajas: 0 })
   const [buscando, setBuscando] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [guardandoAjustes, setGuardandoAjustes] = useState(false)
   const [toast, setToast] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null)
-  const [tab, setTab] = useState<'todos' | 'nuevos' | 'respondio'>('todos')
+  const [tab, setTab] = useState<'todos' | 'nuevos' | 'abiertos' | 'respondio'>('todos')
   const [vista, setVista] = useState<'dashboard' | 'ajustes'>('dashboard')
   const [formAjustes, setFormAjustes] = useState<Negocio | null>(null)
 
@@ -122,9 +124,11 @@ function DashboardInner() {
     setStats({
       total: lista.length,
       nuevos: lista.filter(c => c.estado === 'nuevo').length,
-      email_enviado: lista.filter(c => c.estado === 'email_enviado').length,
+      email_enviado: lista.filter(c => ['email_enviado', 'abierto', 'seguimiento_1', 'seguimiento_2', 'respondio'].includes(c.estado)).length,
       seguimiento: lista.filter(c => c.estado.startsWith('seguimiento')).length,
       respondio: lista.filter(c => c.estado === 'respondio').length,
+      abiertos: lista.filter(c => c.estado === 'abierto').length,
+      bajas: lista.filter(c => c.estado === 'baja').length,
     })
   }, [negocioId])
 
@@ -170,7 +174,8 @@ function DashboardInner() {
   const filtrados = contactos.filter(c => {
     if (tab === 'nuevos') return c.estado === 'nuevo'
     if (tab === 'respondio') return c.estado === 'respondio'
-    return true
+    if (tab === 'abiertos') return c.estado === 'abierto'
+    return c.estado !== 'baja' // "todos" no muestra las bajas por defecto
   })
 
   if (!negocioId) return (
@@ -306,12 +311,12 @@ function DashboardInner() {
               {/* Stat cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
                 {([
-                  { label: 'Total leads',     value: stats.total,        icon: '🎯', ac: '#8b5cf6', gl: 'rgba(139,92,246,.15)', br: 'rgba(139,92,246,.22)' },
-                  { label: 'Sin contactar',   value: stats.nuevos,       icon: '✨', ac: '#3b82f6', gl: 'rgba(59,130,246,.13)',  br: 'rgba(59,130,246,.2)'  },
-                  { label: 'Emails enviados', value: stats.email_enviado, icon: '📤', ac: '#06b6d4', gl: 'rgba(6,182,212,.13)',  br: 'rgba(6,182,212,.2)'   },
-                  { label: 'Respondieron',    value: stats.respondio,    icon: '🏆', ac: '#10b981', gl: 'rgba(16,185,129,.13)', br: 'rgba(16,185,129,.2)'  },
-                ] as const).map((s, i) => (
-                  <div key={s.label} className="sc" style={{ background: `linear-gradient(145deg,rgba(255,255,255,.03) 0%,${s.gl} 100%)`, border: `1px solid ${s.br}`, borderRadius: 16, padding: '20px 20px 16px', animationDelay: `${i * 0.06}s` }}>
+                  { label: 'Total leads',      value: stats.total,         sub: null,                                                                          icon: '🎯', ac: '#8b5cf6', gl: 'rgba(139,92,246,.15)', br: 'rgba(139,92,246,.22)', pct: 100 },
+                  { label: 'Emails enviados',  value: stats.email_enviado, sub: stats.email_enviado > 0 ? `${stats.nuevos} sin contactar` : null,              icon: '📤', ac: '#06b6d4', gl: 'rgba(6,182,212,.13)',   br: 'rgba(6,182,212,.2)',   pct: stats.total > 0 ? (stats.email_enviado / stats.total) * 100 : 0 },
+                  { label: 'Abrieron email',   value: stats.abiertos,      sub: stats.email_enviado > 0 ? `${Math.round((stats.abiertos / Math.max(stats.email_enviado,1))*100)}% tasa apertura` : null, icon: '👁', ac: '#0ea5e9', gl: 'rgba(14,165,233,.13)', br: 'rgba(14,165,233,.2)',  pct: stats.email_enviado > 0 ? (stats.abiertos / stats.email_enviado) * 100 : 0 },
+                  { label: 'Respondieron',     value: stats.respondio,     sub: stats.abiertos > 0 ? `${Math.round((stats.respondio / Math.max(stats.abiertos,1))*100)}% de abiertos` : null,          icon: '🏆', ac: '#10b981', gl: 'rgba(16,185,129,.13)', br: 'rgba(16,185,129,.2)',  pct: stats.email_enviado > 0 ? (stats.respondio / stats.email_enviado) * 100 : 0 },
+                ]).map((s, i) => (
+                  <div key={s.label} className="sc fu" style={{ background: `linear-gradient(145deg,rgba(255,255,255,.03) 0%,${s.gl} 100%)`, border: `1px solid ${s.br}`, borderRadius: 16, padding: '20px 20px 16px', animationDelay: `${i * 0.06}s` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                       <div style={{ width: 38, height: 38, borderRadius: 11, background: s.gl, border: `1px solid ${s.br}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19 }}>{s.icon}</div>
                       {s.value > 0 && (
@@ -321,9 +326,10 @@ function DashboardInner() {
                       )}
                     </div>
                     <div style={{ fontSize: 38, fontWeight: 800, color: '#fff', letterSpacing: '-1.5px', lineHeight: 1, marginBottom: 5, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
-                    <div style={{ fontSize: 12.5, color: '#71717a', fontWeight: 500, marginBottom: 14 }}>{s.label}</div>
+                    <div style={{ fontSize: 12.5, color: '#71717a', fontWeight: 500, marginBottom: s.sub ? 4 : 14 }}>{s.label}</div>
+                    {s.sub && <div style={{ fontSize: 11, color: '#3f3f46', marginBottom: 10 }}>{s.sub}</div>}
                     <div style={{ height: 3, background: 'rgba(255,255,255,.05)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 2, background: `linear-gradient(90deg,${s.gl.replace('.13','.6')},${s.ac})`, width: stats.total > 0 ? `${Math.min(100, (s.value / Math.max(stats.total, 1)) * 100)}%` : '5%', transition: 'width .8s ease' }} />
+                      <div style={{ height: '100%', borderRadius: 2, background: `linear-gradient(90deg,${s.gl.replace('.13','.6')},${s.ac})`, width: `${Math.min(100, Math.max(s.pct, s.value > 0 ? 5 : 0))}%`, transition: 'width .8s ease' }} />
                     </div>
                   </div>
                 ))}
@@ -355,9 +361,10 @@ function DashboardInner() {
                 {/* Tabs */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid rgba(255,255,255,.06)', marginBottom: 0 }}>
                   {([
-                    { key: 'todos' as const,    label: 'Todos',         count: stats.total },
-                    { key: 'nuevos' as const,   label: 'Sin contactar', count: stats.nuevos },
-                    { key: 'respondio' as const, label: 'Respondieron', count: stats.respondio },
+                    { key: 'todos' as const,     label: 'Todos',            count: stats.total - stats.bajas },
+                    { key: 'nuevos' as const,    label: 'Sin contactar',    count: stats.nuevos },
+                    { key: 'abiertos' as const,  label: '👁 Abrieron',      count: stats.abiertos },
+                    { key: 'respondio' as const, label: 'Respondieron',     count: stats.respondio },
                   ]).map(t => (
                     <button key={t.key} onClick={() => setTab(t.key)} className="tb"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, border: 'none', borderBottom: `2px solid ${tab === t.key ? '#8b5cf6' : 'transparent'}`, marginBottom: -1, background: 'transparent', cursor: 'pointer', color: tab === t.key ? '#e4e4e7' : '#52525b' }}>

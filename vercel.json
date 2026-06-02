@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron?secret=captia-cron-2026",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}

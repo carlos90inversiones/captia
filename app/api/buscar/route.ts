@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { buscarNegociosEnGoogleMaps } from '@/lib/google-places'
+import { extraerKeywordBusqueda } from '@/lib/gemini'
 
 export const maxDuration = 60 // Overpass + scraping puede tardar
 
@@ -18,9 +19,13 @@ export async function POST(req: NextRequest) {
       .from('captia_negocios').select('*').eq('id', negocio_id).single()
     if (negErr || !negocio) return new Response(JSON.stringify({ error: 'Negocio no encontrado' }), { status: 404, headers: H })
 
+    // Extraer keyword corta de cliente_ideal para búsqueda OSM/DDG
+    const keyword = await extraerKeywordBusqueda(negocio.cliente_ideal)
+    console.log(`[buscar] cliente_ideal: "${negocio.cliente_ideal}" → keyword: "${keyword}"`)
+
     // Buscamos negocios que puedan ser clientes potenciales
     const encontrados = await buscarNegociosEnGoogleMaps({
-      sector: negocio.cliente_ideal,
+      sector: keyword,
       ciudad: negocio.ciudad,
       radio: 15000, // 15km
       maxResultados: 20,
