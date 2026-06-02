@@ -4,31 +4,24 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 const SECTORES = [
-  { label: 'Gestoría / Asesoría', icon: '📊' },
-  { label: 'Restaurante / Bar',    icon: '🍽️' },
-  { label: 'Clínica / Médico',     icon: '🏥' },
-  { label: 'Peluquería / Estética',icon: '✂️' },
-  { label: 'Abogado / Notaría',    icon: '⚖️' },
-  { label: 'Inmobiliaria',         icon: '🏠' },
-  { label: 'Fontanero / Electricista', icon: '🔧' },
-  { label: 'Academia / Formación', icon: '🎓' },
-  { label: 'Tienda de ropa',       icon: '👗' },
-  { label: 'Taller mecánico',      icon: '🚗' },
-  { label: 'Gimnasio / Deportes',  icon: '💪' },
-  { label: 'Otro',                 icon: '💼' },
+  { label: 'Gestoría / Asesoría',       icon: '📊' },
+  { label: 'Restaurante / Bar',          icon: '🍽️' },
+  { label: 'Clínica / Médico',           icon: '🏥' },
+  { label: 'Peluquería / Estética',      icon: '✂️' },
+  { label: 'Abogado / Notaría',          icon: '⚖️' },
+  { label: 'Inmobiliaria',               icon: '🏠' },
+  { label: 'Fontanero / Electricista',   icon: '🔧' },
+  { label: 'Academia / Formación',       icon: '🎓' },
+  { label: 'Tienda de ropa',             icon: '👗' },
+  { label: 'Taller mecánico',            icon: '🚗' },
+  { label: 'Gimnasio / Deportes',        icon: '💪' },
+  { label: 'Otro',                       icon: '💼' },
 ]
 
 const TONOS = [
-  { value: 'cercano',     label: 'Cercano',     desc: 'Natural, como persona real', emoji: '👋' },
-  { value: 'profesional', label: 'Profesional', desc: 'Serio y directo',            emoji: '💼' },
-  { value: 'divertido',   label: 'Divertido',   desc: 'Desenfadado y con chispa',   emoji: '🎯' },
-]
-
-const FEATURES = [
-  { icon: '🔍', title: 'Busca clientes automáticamente', desc: 'Encuentra negocios locales en tu ciudad usando datos de OpenStreetMap y Google Maps.' },
-  { icon: '✉️', title: 'Emails personalizados con IA',   desc: 'Gemini redacta cada email adaptado al sector y tono de tu negocio. Sin plantillas genéricas.' },
-  { icon: '🔁', title: 'Seguimiento sin esfuerzo',       desc: 'Si no responden a los 4 días, reenvía automáticamente. Tú no haces nada.' },
-  { icon: '📱', title: 'Avisos en tiempo real',           desc: 'Cuando alguien responda, recibes notificación inmediata por email y WhatsApp.' },
+  { value: 'cercano',     label: 'Cercano',     desc: 'Natural y real',        emoji: '👋' },
+  { value: 'profesional', label: 'Profesional', desc: 'Serio y directo',       emoji: '💼' },
+  { value: 'divertido',   label: 'Divertido',   desc: 'Con chispa y energía',  emoji: '🎯' },
 ]
 
 export default function OnboardingPage() {
@@ -55,267 +48,603 @@ export default function OnboardingPage() {
     }
   }
 
-  const field = "w-full bg-[#0d0d10] border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all"
-  const btnPrimary = (disabled: boolean) => ({
-    width: '100%' as const,
-    background: disabled ? '#27272a' : '#7c3aed',
-    color: disabled ? '#52525b' : '#fff',
-    fontWeight: 600,
-    fontSize: 14,
-    padding: '13px 0',
-    borderRadius: 12,
-    border: 'none',
-    cursor: disabled ? 'not-allowed' as const : 'pointer' as const,
-    transition: 'background 0.2s',
-    boxShadow: disabled ? 'none' : '0 4px 20px rgba(124,58,237,0.3)',
-  })
+  const canNext0 = form.nombre && form.sector && form.descripcion
+  const canNext1 = form.ciudad && form.cliente_ideal
+  const canNext2 = form.email
 
   return (
-    <div style={{ minHeight: '100vh', background: '#09090b', display: 'flex', flexDirection: 'column' }}>
+    <>
+      <style>{`
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #05050a; }
 
-      {/* Glows de fondo */}
-      <div style={{ position: 'fixed', top: -100, left: '20%', width: 600, height: 600, background: 'radial-gradient(ellipse, rgba(124,58,237,0.10) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
-      <div style={{ position: 'fixed', bottom: -200, right: '10%', width: 500, height: 500, background: 'radial-gradient(ellipse, rgba(124,58,237,0.06) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-12px); }
+        }
+        @keyframes pulse-ring {
+          0% { transform: scale(1); opacity: 0.4; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+        @keyframes gradient-shift {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
 
-      {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'center', padding: '20px 40px', borderBottom: '1px solid #18181b', position: 'relative', zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 34, height: 34, background: '#7c3aed', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, boxShadow: '0 0 16px rgba(124,58,237,0.4)' }}>⚡</div>
-          <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-0.5px' }}>Captia</span>
-        </div>
-        <span style={{ marginLeft: 12, fontSize: 12, color: '#52525b', borderLeft: '1px solid #27272a', paddingLeft: 12 }}>Clientes automáticos para tu negocio</span>
-      </header>
+        .captia-root {
+          min-height: 100vh;
+          background: #05050a;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          overflow: hidden;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
 
-      {/* Contenido principal — 2 columnas en desktop */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', position: 'relative', zIndex: 1 }}>
+        /* ── Fondo animado ── */
+        .bg-glow-1 {
+          position: fixed; top: -200px; left: -100px;
+          width: 700px; height: 700px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 65%);
+          pointer-events: none; z-index: 0;
+        }
+        .bg-glow-2 {
+          position: fixed; bottom: -300px; right: -100px;
+          width: 800px; height: 800px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(79,70,229,0.12) 0%, transparent 65%);
+          pointer-events: none; z-index: 0;
+        }
+        .bg-glow-3 {
+          position: fixed; top: 40%; left: 35%;
+          width: 400px; height: 400px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 65%);
+          pointer-events: none; z-index: 0;
+        }
+        .bg-grid {
+          position: fixed; inset: 0; z-index: 0; pointer-events: none;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+          background-size: 60px 60px;
+        }
 
-        {/* ── Columna izquierda: propuesta de valor ── */}
-        <div className="left-panel" style={{ flex: 1, padding: '60px 60px 60px 80px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '1px solid #18181b' }}>
-          <div style={{ maxWidth: 520 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 99, padding: '5px 14px', marginBottom: 28 }}>
-              <span style={{ fontSize: 10, color: '#a78bfa', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>100% Gratis · Sin tarjeta</span>
-            </div>
+        /* ── Header ── */
+        .header {
+          display: flex; align-items: center; padding: 18px 40px;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
+          position: relative; z-index: 10;
+          background: rgba(5,5,10,0.8);
+          backdrop-filter: blur(12px);
+        }
+        .logo-icon {
+          width: 36px; height: 36px; background: linear-gradient(135deg, #7c3aed, #4f46e5);
+          border-radius: 10px; display: flex; align-items: center; justify-content: center;
+          font-size: 17px; box-shadow: 0 0 24px rgba(124,58,237,0.5), 0 0 48px rgba(124,58,237,0.15);
+          animation: float 4s ease-in-out infinite;
+        }
+        .logo-text {
+          font-size: 19px; font-weight: 800; color: #fff;
+          letter-spacing: -0.5px; margin-left: 10px;
+        }
+        .header-tag {
+          margin-left: 16px; font-size: 12px; color: #52525b;
+          border-left: 1px solid #27272a; padding-left: 16px;
+        }
+        .header-badge {
+          margin-left: auto;
+          display: inline-flex; align-items: center; gap: 6px;
+          background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.2);
+          border-radius: 99px; padding: 5px 14px; font-size: 11px;
+          color: #a78bfa; font-weight: 600; letter-spacing: 0.5px;
+        }
+        .header-dot {
+          width: 6px; height: 6px; border-radius: 50%;
+          background: #22c55e;
+          box-shadow: 0 0 8px rgba(34,197,94,0.6);
+        }
 
-            <h1 style={{ fontSize: 42, fontWeight: 800, color: '#fff', lineHeight: 1.15, marginBottom: 16, letterSpacing: '-1px' }}>
-              Consigue clientes<br />
-              <span style={{ color: '#a78bfa' }}>mientras duermes</span>
-            </h1>
-            <p style={{ fontSize: 16, color: '#71717a', lineHeight: 1.7, marginBottom: 48, maxWidth: 440 }}>
-              Captia busca negocios locales en tu ciudad, les escribe emails personalizados con IA y hace el seguimiento por ti. Tú solo cierras los tratos.
-            </p>
+        /* ── Layout ── */
+        .main-layout {
+          flex: 1; display: flex; position: relative; z-index: 1;
+        }
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {FEATURES.map(f => (
-                <div key={f.title} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  <div style={{ width: 40, height: 40, background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.15)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{f.icon}</div>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#e4e4e7', marginBottom: 3 }}>{f.title}</p>
-                    <p style={{ fontSize: 13, color: '#52525b', lineHeight: 1.5 }}>{f.desc}</p>
+        /* ── Panel izquierdo ── */
+        .left-panel {
+          flex: 1; padding: 64px 72px;
+          display: flex; flex-direction: column; justify-content: center;
+          border-right: 1px solid rgba(255,255,255,0.05);
+        }
+        .pill {
+          display: inline-flex; align-items: center; gap: 8px;
+          background: rgba(124,58,237,0.10); border: 1px solid rgba(124,58,237,0.22);
+          border-radius: 99px; padding: 6px 16px; margin-bottom: 32px;
+          animation: fade-in-up 0.5s ease both;
+        }
+        .pill-dot {
+          width: 6px; height: 6px; border-radius: 50%;
+          background: #a78bfa; position: relative;
+        }
+        .pill-dot::after {
+          content: ''; position: absolute; inset: -2px;
+          border-radius: 50%; background: rgba(167,139,250,0.4);
+          animation: pulse-ring 1.5s ease-out infinite;
+        }
+        .pill span { font-size: 11px; color: #a78bfa; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }
+
+        .hero-title {
+          font-size: 52px; font-weight: 900; color: #fff;
+          line-height: 1.1; margin-bottom: 20px; letter-spacing: -2px;
+          animation: fade-in-up 0.5s 0.1s ease both;
+        }
+        .hero-title .gradient-text {
+          background: linear-gradient(135deg, #a78bfa 0%, #818cf8 50%, #c084fc 100%);
+          background-size: 200% 200%;
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: gradient-shift 4s ease infinite;
+        }
+        .hero-sub {
+          font-size: 16px; color: #71717a; line-height: 1.75; max-width: 460px;
+          margin-bottom: 52px;
+          animation: fade-in-up 0.5s 0.2s ease both;
+        }
+
+        .features-list {
+          display: flex; flex-direction: column; gap: 24px;
+          animation: fade-in-up 0.5s 0.3s ease both;
+        }
+        .feature-item {
+          display: flex; gap: 16px; align-items: flex-start;
+          padding: 16px 20px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.05);
+          border-radius: 14px;
+          transition: all 0.2s;
+        }
+        .feature-item:hover {
+          background: rgba(124,58,237,0.05);
+          border-color: rgba(124,58,237,0.18);
+          transform: translateX(4px);
+        }
+        .feature-icon {
+          width: 42px; height: 42px; flex-shrink: 0;
+          background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(79,70,229,0.10));
+          border: 1px solid rgba(124,58,237,0.2);
+          border-radius: 12px; display: flex; align-items: center; justify-content: center;
+          font-size: 19px;
+        }
+        .feature-title { font-size: 14px; font-weight: 600; color: #e4e4e7; margin-bottom: 3px; }
+        .feature-desc  { font-size: 12px; color: #52525b; line-height: 1.55; }
+
+        .stats-row {
+          display: flex; gap: 0; margin-top: 48px; padding-top: 40px;
+          border-top: 1px solid rgba(255,255,255,0.05);
+          animation: fade-in-up 0.5s 0.4s ease both;
+        }
+        .stat-item { flex: 1; text-align: center; }
+        .stat-item:not(:last-child) { border-right: 1px solid rgba(255,255,255,0.05); }
+        .stat-num {
+          font-size: 28px; font-weight: 900; letter-spacing: -1px;
+          background: linear-gradient(135deg, #a78bfa, #818cf8);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .stat-label { font-size: 11px; color: #3f3f46; margin-top: 2px; }
+
+        /* ── Panel derecho ── */
+        .right-panel {
+          width: 540px; flex-shrink: 0;
+          padding: 40px 52px;
+          display: flex; flex-direction: column; justify-content: center;
+          background: rgba(255,255,255,0.015);
+        }
+
+        /* Progress */
+        .progress-bar {
+          display: flex; gap: 6px; margin-bottom: 36px;
+        }
+        .progress-segment {
+          flex: 1; height: 3px; border-radius: 99px;
+          background: #1c1c24;
+          transition: background 0.5s;
+          overflow: hidden; position: relative;
+        }
+        .progress-segment.active::after {
+          content: '';
+          position: absolute; inset: 0;
+          background: linear-gradient(90deg, #7c3aed, #a78bfa);
+          border-radius: 99px;
+        }
+
+        /* Card */
+        .step-card {
+          background: rgba(255,255,255,0.025);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 22px; padding: 32px 28px;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 0 0 1px rgba(124,58,237,0.05), 0 24px 48px rgba(0,0,0,0.4);
+          animation: fade-in-up 0.35s ease both;
+        }
+        .step-label {
+          font-size: 10px; font-weight: 700; color: #7c3aed;
+          letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px;
+        }
+        .step-title { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 6px; letter-spacing: -0.5px; }
+        .step-sub   { font-size: 13px; color: #52525b; margin-bottom: 28px; line-height: 1.5; }
+
+        /* Inputs */
+        .field-label {
+          display: block; font-size: 11px; font-weight: 600;
+          color: #71717a; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+        }
+        .field-input {
+          width: 100%; background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 12px; padding: 12px 16px;
+          font-size: 14px; color: #f4f4f5;
+          outline: none; transition: all 0.2s;
+          font-family: inherit;
+        }
+        .field-input::placeholder { color: #3f3f46; }
+        .field-input:focus {
+          border-color: rgba(124,58,237,0.5);
+          background: rgba(124,58,237,0.04);
+          box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+        }
+        .field-group { margin-bottom: 18px; }
+
+        /* Sectores grid */
+        .sectores-grid {
+          display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 18px;
+        }
+        .sector-btn {
+          padding: 10px 8px; border-radius: 11px; cursor: pointer;
+          transition: all 0.15s; display: flex; flex-direction: column; gap: 5px;
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.02);
+          text-align: left;
+        }
+        .sector-btn:hover { border-color: rgba(124,58,237,0.35); background: rgba(124,58,237,0.06); }
+        .sector-btn.selected {
+          border-color: #7c3aed !important;
+          background: rgba(124,58,237,0.14) !important;
+          box-shadow: 0 0 0 1px rgba(124,58,237,0.3), inset 0 1px 0 rgba(167,139,250,0.1);
+        }
+        .sector-emoji { font-size: 18px; line-height: 1; }
+        .sector-label { font-size: 10px; font-weight: 500; line-height: 1.3; color: #71717a; }
+        .sector-btn.selected .sector-label { color: #c4b5fd; }
+
+        /* Tono grid */
+        .tonos-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+        .tono-btn {
+          padding: 14px 10px; border-radius: 12px; cursor: pointer;
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.02);
+          display: flex; flex-direction: column; align-items: center; gap: 5px;
+          transition: all 0.15s;
+        }
+        .tono-btn:hover { border-color: rgba(124,58,237,0.35); background: rgba(124,58,237,0.06); }
+        .tono-btn.selected {
+          border-color: #7c3aed !important;
+          background: rgba(124,58,237,0.14) !important;
+          box-shadow: 0 0 0 1px rgba(124,58,237,0.3);
+        }
+        .tono-emoji { font-size: 22px; }
+        .tono-name { font-size: 12px; font-weight: 700; color: #a1a1aa; }
+        .tono-btn.selected .tono-name { color: #c4b5fd; }
+        .tono-desc { font-size: 10px; color: #3f3f46; text-align: center; line-height: 1.4; }
+
+        /* Summary items */
+        .summary-item {
+          display: flex; gap: 14px; align-items: flex-start;
+          padding: 13px 16px; border-radius: 12px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.05);
+          margin-bottom: 10px;
+          transition: all 0.2s;
+        }
+        .summary-item:hover { border-color: rgba(124,58,237,0.2); background: rgba(124,58,237,0.04); }
+        .summary-emoji { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+        .summary-title { font-size: 13px; font-weight: 600; color: #e4e4e7; }
+        .summary-desc  { font-size: 11px; color: #52525b; margin-top: 2px; line-height: 1.4; }
+
+        /* Buttons */
+        .btn-primary {
+          width: 100%; padding: 14px; border-radius: 13px; border: none;
+          background: linear-gradient(135deg, #7c3aed, #6d28d9);
+          color: #fff; font-size: 14px; font-weight: 700;
+          cursor: pointer; transition: all 0.2s; letter-spacing: -0.2px;
+          box-shadow: 0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.1) inset;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          font-family: inherit;
+        }
+        .btn-primary:hover:not(:disabled) {
+          background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+          box-shadow: 0 6px 28px rgba(124,58,237,0.55), 0 1px 0 rgba(255,255,255,0.1) inset;
+          transform: translateY(-1px);
+        }
+        .btn-primary:disabled {
+          background: #1c1c24; color: #3f3f46; cursor: not-allowed;
+          box-shadow: none; transform: none;
+        }
+        .btn-back {
+          padding: 14px 18px; border-radius: 13px;
+          background: transparent; border: 1px solid rgba(255,255,255,0.08);
+          color: #52525b; font-size: 13px; cursor: pointer;
+          transition: all 0.2s; font-family: inherit;
+        }
+        .btn-back:hover { border-color: rgba(255,255,255,0.15); color: #a1a1aa; }
+        .btn-row { display: flex; gap: 10px; }
+        .btn-row .btn-primary { flex: 1; width: auto; }
+
+        .footer-text {
+          text-align: center; font-size: 11px; color: #27272a; margin-top: 22px;
+          letter-spacing: 0.3px;
+        }
+
+        /* Spinner */
+        .spinner {
+          width: 15px; height: 15px; border-radius: 50%;
+          border: 2px solid rgba(255,255,255,0.2);
+          border-top-color: #fff;
+          animation: spin 0.6s linear infinite;
+        }
+
+        @media (max-width: 960px) {
+          .left-panel { display: none; }
+          .right-panel { width: 100%; padding: 32px 24px; }
+          .hero-title { font-size: 36px; }
+          .header { padding: 16px 24px; }
+          .header-tag { display: none; }
+        }
+      `}</style>
+
+      <div className="captia-root">
+        {/* Fondo */}
+        <div className="bg-glow-1" />
+        <div className="bg-glow-2" />
+        <div className="bg-glow-3" />
+        <div className="bg-grid" />
+
+        {/* Header */}
+        <header className="header">
+          <div className="logo-icon">⚡</div>
+          <span className="logo-text">Captia</span>
+          <span className="header-tag">Clientes automáticos para tu negocio</span>
+          <div className="header-badge">
+            <span className="header-dot" />
+            100% Gratis · Sin tarjeta
+          </div>
+        </header>
+
+        {/* Layout */}
+        <div className="main-layout">
+
+          {/* ── Columna izquierda ── */}
+          <div className="left-panel">
+            <div style={{ maxWidth: 500 }}>
+              <div className="pill">
+                <span className="pill-dot" />
+                <span>Nuevo · IA para ventas locales</span>
+              </div>
+
+              <h1 className="hero-title">
+                Consigue clientes<br />
+                <span className="gradient-text">mientras duermes</span>
+              </h1>
+
+              <p className="hero-sub">
+                Captia escanea tu ciudad, encuentra negocios que pueden comprarte,
+                les escribe emails con IA y hace el seguimiento por ti.<br />
+                <strong style={{ color: '#e4e4e7' }}>Tú solo cierras los tratos.</strong>
+              </p>
+
+              <div className="features-list">
+                {[
+                  { icon: '🔍', title: 'Búsqueda automática de clientes',  desc: 'Encuentra negocios locales usando OpenStreetMap y scraping inteligente. Sin pagar APIs.' },
+                  { icon: '✉️', title: 'Emails únicos generados por IA',   desc: 'Gemini escribe cada email adaptado al negocio destino. Nada de plantillas copiadas.' },
+                  { icon: '🔁', title: 'Seguimiento sin esfuerzo',          desc: 'A los 4 días envía follow-up automático. A los 11 días, otro. Tú no tocas nada.' },
+                  { icon: '📱', title: 'Alertas en tiempo real',             desc: 'Email + WhatsApp cuando alguien responda. Reacciona en segundos, no en días.' },
+                ].map(f => (
+                  <div className="feature-item" key={f.title}>
+                    <div className="feature-icon">{f.icon}</div>
+                    <div>
+                      <div className="feature-title">{f.title}</div>
+                      <div className="feature-desc">{f.desc}</div>
+                    </div>
                   </div>
-                </div>
+                ))}
+              </div>
+
+              <div className="stats-row">
+                {[
+                  { num: '+200', label: 'Negocios contactados' },
+                  { num: '68%',  label: 'Tasa de apertura' },
+                  { num: '< 5m', label: 'Para empezar' },
+                ].map(s => (
+                  <div className="stat-item" key={s.label}>
+                    <div className="stat-num">{s.num}</div>
+                    <div className="stat-label">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Columna derecha ── */}
+          <div className="right-panel">
+
+            {/* Progress */}
+            <div className="progress-bar">
+              {[0,1,2,3].map(i => (
+                <div key={i} className={`progress-segment ${i <= step ? 'active' : ''}`} />
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: 32, marginTop: 52, paddingTop: 32, borderTop: '1px solid #18181b' }}>
-              {[['🏢', '+200', 'negocios contactados'], ['📧', '68%', 'tasa de apertura'], ['⚡', '< 5min', 'para empezar']].map(([icon, num, label]) => (
-                <div key={label as string} style={{ textAlign: 'center' as const }}>
-                  <div style={{ fontSize: 20 }}>{icon}</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#a78bfa', lineHeight: 1.2 }}>{num}</div>
-                  <div style={{ fontSize: 11, color: '#52525b' }}>{label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Columna derecha: formulario de onboarding ── */}
-        <div className="right-panel" style={{ width: 520, flexShrink: 0, padding: '40px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: 'rgba(0,0,0,0.2)' }}>
-
-          {/* Barra de progreso */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} style={{ flex: 1, height: 3, borderRadius: 99, background: i <= step ? '#7c3aed' : '#27272a', transition: 'background 0.4s' }} />
-            ))}
-          </div>
-
-          {/* Card del paso */}
-          <div style={{ background: '#111114', border: '1px solid #27272a', borderRadius: 20, padding: '32px 28px' }}>
-
-            {/* ── PASO 0 ── */}
+            {/* ── Paso 0 ── */}
             {step === 0 && (
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#a78bfa', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>Paso 1 de 4</p>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 4 }}>¿A qué te dedicas?</h2>
-                <p style={{ fontSize: 13, color: '#71717a', marginBottom: 24 }}>La IA necesita entender tu negocio para buscar los clientes correctos.</p>
+              <div className="step-card">
+                <div className="step-label">Paso 1 de 4</div>
+                <h2 className="step-title">¿A qué te dedicas?</h2>
+                <p className="step-sub">La IA necesita entender tu negocio para buscar los clientes correctos.</p>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 6 }}>Nombre del negocio</label>
-                  <input autoFocus type="text" placeholder="Ej: Clínica Dental Martínez"
-                    value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
-                    className={field} />
+                <div className="field-group">
+                  <label className="field-label">Nombre del negocio</label>
+                  <input className="field-input" type="text" autoFocus
+                    placeholder="Ej: Clínica Dental Martínez"
+                    value={form.nombre}
+                    onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} />
                 </div>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 8 }}>Sector</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div className="field-group">
+                  <label className="field-label">Sector</label>
+                  <div className="sectores-grid">
                     {SECTORES.map(s => (
-                      <button key={s.label} onClick={() => setForm(f => ({ ...f, sector: s.label }))}
-                        style={{
-                          padding: '10px 8px', borderRadius: 10,
-                          border: `1px solid ${form.sector === s.label ? '#7c3aed' : '#27272a'}`,
-                          background: form.sector === s.label ? 'rgba(124,58,237,0.15)' : '#0d0d10',
-                          color: form.sector === s.label ? '#c4b5fd' : '#71717a',
-                          fontSize: 11, fontWeight: 500, textAlign: 'left', cursor: 'pointer',
-                          transition: 'all 0.15s', display: 'flex', flexDirection: 'column', gap: 4,
-                        }}>
-                        <span style={{ fontSize: 16 }}>{s.icon}</span>
-                        <span style={{ lineHeight: 1.3 }}>{s.label}</span>
+                      <button key={s.label}
+                        className={`sector-btn ${form.sector === s.label ? 'selected' : ''}`}
+                        onClick={() => setForm(f => ({ ...f, sector: s.label }))}>
+                        <span className="sector-emoji">{s.icon}</span>
+                        <span className="sector-label">{s.label}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 24 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 6 }}>¿Qué haces exactamente?</label>
-                  <textarea rows={2} placeholder="Ej: Somos una clínica dental en Madrid. Hacemos ortodoncia, implantes y revisiones."
-                    value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
-                    className={field} style={{ resize: 'none' }} />
+                <div className="field-group">
+                  <label className="field-label">¿Qué haces exactamente?</label>
+                  <textarea className="field-input" rows={2} style={{ resize: 'none' }}
+                    placeholder="Ej: Somos una clínica dental en Madrid. Hacemos ortodoncia, implantes y revisiones."
+                    value={form.descripcion}
+                    onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} />
                 </div>
 
-                <button onClick={() => setStep(1)} disabled={!form.nombre || !form.sector || !form.descripcion}
-                  style={btnPrimary(!form.nombre || !form.sector || !form.descripcion)}>
+                <button className="btn-primary" disabled={!canNext0} onClick={() => setStep(1)}>
                   Continuar →
                 </button>
               </div>
             )}
 
-            {/* ── PASO 1 ── */}
+            {/* ── Paso 1 ── */}
             {step === 1 && (
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#a78bfa', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>Paso 2 de 4</p>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 4 }}>¿A quién le vendes?</h2>
-                <p style={{ fontSize: 13, color: '#71717a', marginBottom: 24 }}>Cuanto más concreto seas, mejor encontrará la IA.</p>
+              <div className="step-card">
+                <div className="step-label">Paso 2 de 4</div>
+                <h2 className="step-title">¿A quién le vendes?</h2>
+                <p className="step-sub">Cuanto más concreto seas, mejor encontrará la IA.</p>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 6 }}>Ciudad donde buscamos clientes</label>
-                  <input autoFocus type="text" placeholder="Ej: Madrid, Sevilla, Huelva..."
-                    value={form.ciudad} onChange={e => setForm(f => ({ ...f, ciudad: e.target.value }))}
-                    className={field} />
+                <div className="field-group">
+                  <label className="field-label">Ciudad donde buscamos clientes</label>
+                  <input className="field-input" type="text" autoFocus
+                    placeholder="Ej: Madrid, Sevilla, Huelva..."
+                    value={form.ciudad}
+                    onChange={e => setForm(f => ({ ...f, ciudad: e.target.value }))} />
                 </div>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 6 }}>¿Quién es tu cliente ideal?</label>
-                  <textarea rows={3} placeholder="Ej: Restaurantes y hoteles de Madrid que necesiten proveedor de vinos."
-                    value={form.cliente_ideal} onChange={e => setForm(f => ({ ...f, cliente_ideal: e.target.value }))}
-                    className={field} style={{ resize: 'none' }} />
+                <div className="field-group">
+                  <label className="field-label">¿Quién es tu cliente ideal?</label>
+                  <textarea className="field-input" rows={3} style={{ resize: 'none' }}
+                    placeholder="Ej: Restaurantes y hoteles de Madrid que necesiten proveedor de vinos."
+                    value={form.cliente_ideal}
+                    onChange={e => setForm(f => ({ ...f, cliente_ideal: e.target.value }))} />
                 </div>
 
-                <div style={{ marginBottom: 24 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 8 }}>Tono de los emails</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div className="field-group">
+                  <label className="field-label">Tono de los emails</label>
+                  <div className="tonos-grid">
                     {TONOS.map(t => (
-                      <button key={t.value} onClick={() => setForm(f => ({ ...f, tono: t.value }))}
-                        style={{ padding: '12px 8px', borderRadius: 10, border: `1px solid ${form.tono === t.value ? '#7c3aed' : '#27272a'}`, background: form.tono === t.value ? 'rgba(124,58,237,0.15)' : '#0d0d10', cursor: 'pointer', transition: 'all 0.15s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 20 }}>{t.emoji}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: form.tono === t.value ? '#c4b5fd' : '#a1a1aa' }}>{t.label}</span>
-                        <span style={{ fontSize: 10, color: '#52525b', textAlign: 'center', lineHeight: 1.3 }}>{t.desc}</span>
+                      <button key={t.value}
+                        className={`tono-btn ${form.tono === t.value ? 'selected' : ''}`}
+                        onClick={() => setForm(f => ({ ...f, tono: t.value }))}>
+                        <span className="tono-emoji">{t.emoji}</span>
+                        <span className="tono-name">{t.label}</span>
+                        <span className="tono-desc">{t.desc}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setStep(0)} style={{ padding: '13px 16px', background: 'transparent', border: '1px solid #27272a', borderRadius: 12, color: '#71717a', fontSize: 13, cursor: 'pointer' }}>← Atrás</button>
-                  <button onClick={() => setStep(2)} disabled={!form.ciudad || !form.cliente_ideal}
-                    style={{ ...btnPrimary(!form.ciudad || !form.cliente_ideal), width: undefined, flex: 1 }}>
+                <div className="btn-row">
+                  <button className="btn-back" onClick={() => setStep(0)}>← Atrás</button>
+                  <button className="btn-primary" disabled={!canNext1} onClick={() => setStep(2)}>
                     Continuar →
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ── PASO 2 ── */}
+            {/* ── Paso 2 ── */}
             {step === 2 && (
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#a78bfa', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>Paso 3 de 4</p>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 4 }}>¿Cómo te avisamos?</h2>
-                <p style={{ fontSize: 13, color: '#71717a', marginBottom: 24 }}>Te notificamos cuando alguien responda.</p>
+              <div className="step-card">
+                <div className="step-label">Paso 3 de 4</div>
+                <h2 className="step-title">¿Cómo te avisamos?</h2>
+                <p className="step-sub">Te notificamos cuando alguien responda.</p>
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 6 }}>Tu email</label>
-                  <input autoFocus type="email" placeholder="tu@empresa.com"
-                    value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                    className={field} />
-                  <p style={{ fontSize: 11, color: '#3f3f46', marginTop: 4 }}>Los clientes responderán a este email</p>
+                <div className="field-group">
+                  <label className="field-label">Tu email</label>
+                  <input className="field-input" type="email" autoFocus
+                    placeholder="tu@empresa.com"
+                    value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                  <p style={{ fontSize: 11, color: '#3f3f46', marginTop: 6 }}>Los clientes responderán a este email</p>
                 </div>
 
-                <div style={{ marginBottom: 24 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 6 }}>Teléfono <span style={{ color: '#3f3f46', fontWeight: 400 }}>(opcional — avisos WhatsApp)</span></label>
-                  <input type="tel" placeholder="612 345 678"
-                    value={form.telefono} onChange={e => setForm(f => ({ ...f, telefono: e.target.value }))}
-                    className={field} />
+                <div className="field-group">
+                  <label className="field-label">Teléfono <span style={{ color: '#27272a', fontWeight: 400, textTransform: 'none' }}>(opcional — avisos WhatsApp)</span></label>
+                  <input className="field-input" type="tel"
+                    placeholder="612 345 678"
+                    value={form.telefono}
+                    onChange={e => setForm(f => ({ ...f, telefono: e.target.value }))} />
                 </div>
 
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setStep(1)} style={{ padding: '13px 16px', background: 'transparent', border: '1px solid #27272a', borderRadius: 12, color: '#71717a', fontSize: 13, cursor: 'pointer' }}>← Atrás</button>
-                  <button onClick={() => setStep(3)} disabled={!form.email}
-                    style={{ ...btnPrimary(!form.email), width: undefined, flex: 1 }}>
+                <div className="btn-row">
+                  <button className="btn-back" onClick={() => setStep(1)}>← Atrás</button>
+                  <button className="btn-primary" disabled={!canNext2} onClick={() => setStep(3)}>
                     Continuar →
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ── PASO 3 ── */}
+            {/* ── Paso 3 ── */}
             {step === 3 && (
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#a78bfa', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>Paso 4 de 4</p>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Todo listo 🚀</h2>
-                <p style={{ fontSize: 13, color: '#71717a', marginBottom: 20 }}>Esto es lo que hará Captia por ti automáticamente:</p>
+              <div className="step-card">
+                <div className="step-label">Paso 4 de 4</div>
+                <h2 className="step-title">Todo listo 🚀</h2>
+                <p className="step-sub">Esto es lo que hará Captia por ti:</p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-                  {[
-                    { icon: '🔍', title: 'Busca negocios', desc: `Encuentra clientes en ${form.ciudad} vía OpenStreetMap` },
-                    { icon: '✉️', title: 'Escribe y manda emails', desc: `IA redacta cada email en tono ${form.tono}` },
-                    { icon: '🔁', title: 'Seguimiento automático', desc: 'Si no responden, insiste a los 4 y 11 días' },
-                    { icon: '📱', title: 'Te avisa al instante', desc: `Notificación a ${form.email}` },
-                  ].map(item => (
-                    <div key={item.title} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', background: '#0d0d10', border: '1px solid #27272a', borderRadius: 10 }}>
-                      <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: '#e4e4e7' }}>{item.title}</p>
-                        <p style={{ fontSize: 11, color: '#52525b' }}>{item.desc}</p>
-                      </div>
+                {[
+                  { icon: '🔍', title: 'Busca negocios',           desc: `Encuentra clientes en ${form.ciudad} vía OpenStreetMap` },
+                  { icon: '✉️', title: 'Escribe y manda emails',   desc: `IA redacta cada email en tono ${form.tono}` },
+                  { icon: '🔁', title: 'Seguimiento automático',   desc: 'Reenvía si no responden a los 4 y 11 días' },
+                  { icon: '📱', title: 'Te avisa al instante',     desc: `Notificación a ${form.email}` },
+                ].map(item => (
+                  <div className="summary-item" key={item.title}>
+                    <span className="summary-emoji">{item.icon}</span>
+                    <div>
+                      <div className="summary-title">{item.title}</div>
+                      <div className="summary-desc">{item.desc}</div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
 
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setStep(2)} style={{ padding: '13px 16px', background: 'transparent', border: '1px solid #27272a', borderRadius: 12, color: '#71717a', fontSize: 13, cursor: 'pointer' }}>← Atrás</button>
-                  <button onClick={guardar} disabled={guardando}
-                    style={{ flex: 1, background: '#7c3aed', color: '#fff', fontWeight: 600, fontSize: 14, padding: '13px 0', borderRadius: 12, border: 'none', cursor: guardando ? 'not-allowed' : 'pointer', opacity: guardando ? 0.7 : 1, boxShadow: '0 4px 24px rgba(124,58,237,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    {guardando
-                      ? <><span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Configurando...</>
-                      : '⚡ Activar Captia'}
+                <div className="btn-row" style={{ marginTop: 24 }}>
+                  <button className="btn-back" onClick={() => setStep(2)}>← Atrás</button>
+                  <button className="btn-primary" disabled={guardando} onClick={guardar}
+                    style={{ opacity: guardando ? 0.8 : 1 }}>
+                    {guardando ? <><span className="spinner" />Configurando...</> : '⚡ Activar Captia'}
                   </button>
                 </div>
               </div>
             )}
-          </div>
 
-          <p style={{ textAlign: 'center', fontSize: 11, color: '#27272a', marginTop: 20 }}>
-            Completamente gratis · Sin tarjeta · Sin límites
-          </p>
+            <p className="footer-text">Completamente gratis · Sin tarjeta · Sin límites</p>
+          </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 900px) {
-          .left-panel { display: none !important; }
-          .right-panel { width: 100% !important; padding: 32px 20px !important; }
-        }
-      `}</style>
-    </div>
+    </>
   )
 }
