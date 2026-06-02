@@ -9,6 +9,7 @@ interface Msg { id: number; role: MsgRole; text: string; typing?: boolean }
 
 type InputMode =
   | { type: 'text';    placeholder: string; multiline?: boolean }
+  | { type: 'web-or-text' }
   | { type: 'sectors' }
   | { type: 'tonos' }
   | { type: 'confirm' }
@@ -55,12 +56,12 @@ const STEPS: Step[] = [
     botMsg: '', // se rellena con next del anterior
     field:  'sector',
     input:  { type: 'text', placeholder: 'Ej: Fontanero, Gestoría, Clínica dental, Agencia de marketing...' },
-    next:   (v) => `Perfecto. Ahora cuéntame qué hacéis exactamente en ${v}. Sé concreto — así los emails serán más naturales.`,
+    next:   (v) => `Perfecto. ¿Tenéis página web? Si me la pegas la analizo con IA y entiendo vuestro negocio automáticamente.\n\nSi no tenéis web, escribe directamente qué hacéis en **${v}**.`,
   },
   {
     botMsg: '',
     field:  'descripcion',
-    input:  { type: 'text', placeholder: 'Ej: Hacemos páginas web y apps para negocios locales. Nos especializamos en tiendas online.', multiline: true },
+    input:  { type: 'web-or-text' },
     next:   () => '¿En qué ciudad queréis buscar clientes?',
   },
   {
@@ -124,7 +125,8 @@ export default function ChatOnboarding() {
   const [step,     setStep]     = useState(0)
   const [input,    setInput]    = useState('')
   const [botTyping, setBotTyping] = useState(false)
-  const [guardando, setGuardando] = useState(false)
+  const [guardando,   setGuardando]   = useState(false)
+  const [analizando,  setAnalizando]  = useState(false)
   const [form,     setForm]     = useState<Form>({
     nombre: '', sector: '', descripcion: '', ciudad: '',
     cliente_ideal: '', tono: 'cercano', email: '', telefono: '',
@@ -176,6 +178,72 @@ export default function ChatOnboarding() {
       setStep(nextStepIdx)
       setTimeout(() => (inputRef.current as HTMLElement)?.focus(), 100)
     }, delay)
+  }
+
+  /* ── Analizar web con IA ── */
+  const isURL = (s: string) =>
+    /^(https?:\/\/)|(www\.)|(\.(com|es|net|org|io|eu|co|info|biz)\b)/i.test(s.trim())
+
+  const sendWebOrText = async (value: string) => {
+    if (!value.trim()) return
+    setMsgs(prev => [...prev, newMsg('user', value)])
+    setInput('')
+
+    if (isURL(value)) {
+      // Analizar web con IA
+      setAnalizando(true)
+      setBotTyping(true)
+      setTimeout(() => {
+        setBotTyping(false)
+        setMsgs(prev => [...prev, newMsg('bot', '🔍 Analizando tu web con IA...')])
+        setBotTyping(true)
+      }, 600)
+
+      try {
+        const res  = await fetch('/api/analizar-web', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: value }),
+        })
+        const data = await res.json()
+        setAnalizando(false)
+        setBotTyping(false)
+
+        if (data.error || !data.descripcion) throw new Error(data.error || 'sin resultado')
+
+        const desc = data.descripcion
+        const newForm = { ...form, descripcion: desc }
+        setForm(newForm)
+
+        const nextStepIdx = step + 1
+        const botText = `✅ Perfecto, ya entendí vuestro negocio:\n\n_"${desc}"_\n\n${STEPS[step].next?.(desc, newForm) || ''}`
+        setBotTyping(true)
+        setTimeout(() => {
+          setBotTyping(false)
+          setMsgs(prev => [...prev, newMsg('bot', botText)])
+          setStep(nextStepIdx)
+        }, 1000)
+      } catch {
+        setAnalizando(false)
+        setBotTyping(false)
+        setMsgs(prev => [...prev, newMsg('bot', '❌ No pude acceder a esa web. ¿Me describes tú directamente qué hacéis?')])
+        // El usuario puede escribir manualmente (mismo step, pero ya con tipo texto)
+      }
+    } else {
+      // Texto manual — flujo normal
+      const newForm = { ...form, descripcion: value }
+      setForm(newForm)
+      const nextStepIdx = step + 1
+      const botText = STEPS[step].next?.(value, newForm) || ''
+      setBotTyping(true)
+      const delay = botText.length > 80 ? 1400 : 900
+      setTimeout(() => {
+        setBotTyping(false)
+        setMsgs(prev => [...prev, newMsg('bot', botText)])
+        setStep(nextStepIdx)
+        setTimeout(() => (inputRef.current as HTMLElement)?.focus(), 100)
+      }, delay)
+    }
   }
 
   /* ── Activar Captia ── */
@@ -497,7 +565,7 @@ export default function ChatOnboarding() {
         </div>
 
         {/* ── Input zone ── */}
-        {!botTyping && currentInput && (
+        {(!botTyping || analizando) && currentInput && (
           <div className="input-zone">
             <div className="input-inner">
 
@@ -525,6 +593,25 @@ export default function ChatOnboarding() {
                     />
                   )}
                   <button className="send-btn" type="submit" disabled={!input.trim()}>↑</button>
+                </form>
+              )}
+
+              {/* Web o texto manual */}
+              {currentInput.type === 'web-or-text' && (
+                <form className="text-form" onSubmit={e => { e.preventDefault(); sendWebOrText(input) }}>
+                  <textarea
+                    ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+                    className="text-input" rows={2}
+                    placeholder="https://tuempresa.com  —  o escribe directamente qué hacéis"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendWebOrText(input) } }}
+                    disabled={analizando}
+                    autoFocus
+                  />
+                  <button className="send-btn" type="submit" disabled={!input.trim() || analizando}>
+                    {analizando ? <span className="spinner" style={{ width: 16, height: 16 }} /> : '↑'}
+                  </button>
                 </form>
               )}
 
