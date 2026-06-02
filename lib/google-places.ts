@@ -511,6 +511,64 @@ async function buscarEnPaginasAmarillas(sector: string, ciudad: string, max: num
 }
 
 /* ═══════════════════════════════════════════════════════
+   YELP FUSION API — 5.000 req/día gratis, excelente España
+   Solo activo si YELP_API_KEY está configurado en .env.local
+   ═══════════════════════════════════════════════════════ */
+async function buscarEnYelp(sector: string, ciudad: string, radio: number, max: number): Promise<NegocioEncontrado[]> {
+  const apiKey = process.env.YELP_API_KEY
+  if (!apiKey) return []
+
+  const url = new URL('https://api.yelp.com/v3/businesses/search')
+  url.searchParams.set('term', sector)
+  url.searchParams.set('location', `${ciudad}, España`)
+  url.searchParams.set('limit', String(Math.min(max, 50)))
+  url.searchParams.set('locale', 'es_ES')
+  url.searchParams.set('radius', String(Math.min(radio, 40000)))
+
+  try {
+    const res = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!res.ok) {
+      console.log(`[Yelp] HTTP ${res.status}: ${await res.text().then(t => t.slice(0, 100))}`)
+      return []
+    }
+    const data = await res.json() as { businesses?: Record<string, unknown>[] }
+    const businesses = data.businesses || []
+    console.log(`[Yelp] ${businesses.length} negocios para "${sector}" en ${ciudad}`)
+
+    const negocios: NegocioEncontrado[] = []
+    for (const b of businesses) {
+      const nombre = String(b.name || '').trim()
+      if (!nombre) continue
+      const loc = (b.location || {}) as Record<string, unknown>
+      const direccion = [loc.address1, loc.address2].filter(Boolean).join(', ') || String(loc.display_address || ciudad)
+      const telefono = String(b.phone || b.display_phone || '').replace(/\s/g, '') || null
+      const tel = telefono ? formatTelefonoPa(telefono) : null
+      negocios.push({
+        place_id: `yelp-${b.id || Buffer.from(nombre + ciudad).toString('hex').slice(0, 16)}`,
+        nombre,
+        direccion: typeof direccion === 'string' ? direccion : ciudad,
+        ciudad,
+        telefono: tel,
+        web: null, // Yelp no devuelve la web del negocio, usar Enriquecer
+        email_encontrado: null,
+        rating: typeof b.rating === 'number' ? b.rating : null,
+        sector,
+      })
+    }
+    return negocios
+  } catch (err) {
+    console.log(`[Yelp] Error: ${String(err).slice(0, 100)}`)
+    return []
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
    FUNCIÓN PRINCIPAL
    ═══════════════════════════════════════════════════════ */
 export async function buscarNegociosEnGoogleMaps(params: {
@@ -521,8 +579,8 @@ export async function buscarNegociosEnGoogleMaps(params: {
 }): Promise<NegocioEncontrado[]> {
   const { sector, ciudad, radio, maxResultados = 20 } = params
 
-  // 1. Correr OSM y Páginas Amarillas en paralelo
-  const [osmNegocios, paNegocios] = await Promise.all([
+  // 1. Correr OSM, Páginas Amarillas y Yelp en paralelo
+  const [osmNegocios, paNegocios, yelpNegocios] = await Promise.all([
     // Track OSM/Overpass
     (async (): Promise<NegocioEncontrado[]> => {
       const osmKeys = getSectorOsmKeys(sector)
@@ -539,14 +597,16 @@ export async function buscarNegociosEnGoogleMaps(params: {
       }
       return negocios
     })(),
-    // Track Páginas Amarillas
+    // Track Páginas Amarillas (graceful: si está bloqueado devuelve [])
     buscarEnPaginasAmarillas(sector, ciudad, maxResultados),
+    // Track Yelp (solo si YELP_API_KEY está configurado)
+    buscarEnYelp(sector, ciudad, radio, maxResultados),
   ])
 
-  // 2. Merge deduplicando por nombre (OSM primero — tiene más datos de contacto)
+  // 2. Merge deduplicando por nombre — prioridad: OSM > Yelp > PA
   const seen = new Set<string>()
   const merged: NegocioEncontrado[] = []
-  for (const neg of [...osmNegocios, ...paNegocios]) {
+  for (const neg of [...osmNegocios, ...yelpNegocios, ...paNegocios]) {
     const key = neg.nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
     if (!seen.has(key)) {
       seen.add(key)
@@ -556,11 +616,11 @@ export async function buscarNegociosEnGoogleMaps(params: {
   }
 
   if (merged.length > 0) {
-    console.log(`[Captia] ${merged.length} negocios totales (OSM:${osmNegocios.length} + PA:${paNegocios.length})`)
+    console.log(`[Captia] ${merged.length} total (OSM:${osmNegocios.length} + Yelp:${yelpNegocios.length} + PA:${paNegocios.length})`)
     return merged
   }
 
   // 3. Fallback: DuckDuckGo + scraping de directorios
-  console.log(`[Captia] Sin resultados OSM/PA — usando fallback DuckDuckGo`)
+  console.log(`[Captia] Sin resultados — usando fallback DuckDuckGo`)
   return buscarEnDirectorios(sector, ciudad, maxResultados)
 }
