@@ -110,7 +110,7 @@ function DashboardInner() {
       const res = await fetch('/api/negocio', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: negocioId, ...formAjustes }),
+        body: JSON.stringify({ ...formAjustes, id: negocioId }),
       })
       const data = await res.json()
       if (data.ok) {
