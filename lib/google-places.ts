@@ -280,6 +280,237 @@ async function osmElementToNegocio(el: Record<string, unknown>, sector: string, 
 }
 
 /* ═══════════════════════════════════════════════════════
+   PÁGINAS AMARILLAS — directorio español más completo
+   ═══════════════════════════════════════════════════════ */
+
+const PA_SECTOR_MAP: [string[], string][] = [
+  [['farmaci'], 'farmacias'],
+  [['restauran', 'gastro', 'cocina', 'tapas'], 'restaurantes'],
+  [['cafeter', 'café', 'cafe'], 'cafeterias'],
+  [['bar', 'pub', 'cervecería', 'cerveceria'], 'bares'],
+  [['peluquer'], 'peluquerias'],
+  [['barbería', 'barberia'], 'barberias'],
+  [['estetica', 'estética', 'cosmética', 'cosmetica', 'belleza'], 'centros-de-estetica'],
+  [['hotel'], 'hoteles'],
+  [['hostal'], 'hostales'],
+  [['alojamiento', 'turístico', 'turistico', 'rural'], 'alojamientos-rurales'],
+  [['médico', 'medico', 'doctor', 'consultor médico'], 'medicos'],
+  [['clínica', 'clinica'], 'clinicas'],
+  [['dentist', 'dental', 'odontol'], 'dentistas'],
+  [['gimnasio', 'fitness', 'crossfit'], 'gimnasios'],
+  [['inmobiliar'], 'inmobiliarias'],
+  [['fontaner', 'plomero'], 'fontaneros'],
+  [['electric'], 'electricistas'],
+  [['taller', 'mecánic', 'mecanico', 'automóvil', 'automovil'], 'talleres-mecanicos'],
+  [['fisioter', 'fisio'], 'fisioterapeutas'],
+  [['academia', 'clases particular', 'formación', 'formacion'], 'academias'],
+  [['abogado', 'jurídico', 'juridico', 'derecho'], 'abogados'],
+  [['gestoria', 'gestoría', 'contabilidad', 'asesor fiscal', 'fiscal', 'contable'], 'gesto-asesorias'],
+  [['seguro', 'seguros'], 'seguros'],
+  [['arquitecto'], 'arquitectos'],
+  [['psicolog'], 'psicologos'],
+  [['veterinar'], 'veterinarios'],
+  [['pintor', 'pintura'], 'pintores'],
+  [['carpinter'], 'carpinteros'],
+  [['cerrajer'], 'cerrajeros'],
+  [['mudanza'], 'mudanzas'],
+  [['limpieza'], 'empresas-de-limpieza'],
+  [['informática', 'informatica', 'tecnología', 'tecnologia', 'software', 'desarrollo web', 'digital'], 'empresas-de-informatica'],
+  [['marketing', 'publicidad', 'agencia de comunicación'], 'agencias-de-publicidad'],
+  [['transporte', 'logística', 'logistica', 'mensajería', 'mensajeria'], 'transporte'],
+  [['construcción', 'construccion', 'obra', 'reformas'], 'empresas-de-construccion'],
+  [['florist'], 'floristerias'],
+  [['óptica', 'optica'], 'opticas'],
+  [['joyería', 'joyeria'], 'joyerias'],
+  [['supermercado', 'alimentaci'], 'alimentacion'],
+  [['ropa', 'moda', 'boutique'], 'ropa'],
+]
+
+function getSectorPA(sector: string): string | null {
+  const s = sector.toLowerCase()
+  for (const [keywords, paQuery] of PA_SECTOR_MAP) {
+    if (keywords.some(k => s.includes(k))) return paQuery
+  }
+  // Generic fallback: use first meaningful word
+  const palabras = s.split(/\s+/).filter(w => w.length > 4 && !['para', 'como', 'este', 'esta', 'empresa', 'negocio', 'automatizacion', 'automatización'].includes(w))
+  return palabras[0] ? encodeURIComponent(palabras[0]) : null
+}
+
+function normalizarCiudadPA(ciudad: string): string {
+  return ciudad.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+}
+
+function formatTelefonoPa(tel: string): string | null {
+  if (!tel) return null
+  const clean = String(tel).replace(/\s+/g, '').replace(/^0034/, '+34').replace(/^34(?=\d{9}$)/, '+34')
+  if (clean.replace(/\D/g, '').length < 9) return null
+  return clean
+}
+
+// Recursively search for business-like objects in a JSON tree
+function extraerNegociosDeJson(obj: unknown, sector: string, ciudad: string, max: number, seen: Set<string>, acc: NegocioEncontrado[] = [], depth = 0): NegocioEncontrado[] {
+  if (depth > 12 || acc.length >= max) return acc
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      extraerNegociosDeJson(item, sector, ciudad, max, seen, acc, depth + 1)
+      if (acc.length >= max) break
+    }
+  } else if (obj && typeof obj === 'object') {
+    const o = obj as Record<string, unknown>
+    const nombre = String(o.name || o.nombre || o.title || o.businessName || o.razonSocial || o.denominacion || '').trim()
+    if (nombre && nombre.length >= 3 && nombre.length <= 120 && !/^(true|false|null|\d+)$/.test(nombre)) {
+      const direccion = String(o.address || o.direccion || o.street || o.streetAddress || '').trim() || ciudad
+      const telefono = String(o.phone || o.telefono || o.telephone || o.phoneNumber || o.tlf || '').trim()
+      const web = String(o.website || o.web || o.url || o.link || o.siteUrl || '').trim()
+      const email = String(o.email || o.mail || o.correo || '').trim()
+      const tel = formatTelefonoPa(telefono)
+      if (tel || direccion.length > 5 || (web && web.startsWith('http'))) {
+        const key = nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
+        if (!seen.has(key)) {
+          seen.add(key)
+          acc.push({
+            place_id: `pa-${Buffer.from(nombre + ciudad).toString('hex').slice(0, 16)}`,
+            nombre,
+            direccion: direccion || ciudad,
+            ciudad,
+            telefono: tel,
+            web: (web && web.startsWith('http')) ? web : null,
+            email_encontrado: (email && email.includes('@')) ? email.toLowerCase() : null,
+            rating: typeof o.rating === 'number' ? o.rating : (typeof o.score === 'number' ? o.score : null),
+            sector,
+          })
+        }
+        return acc // don't recurse into a matched node
+      }
+    }
+    for (const val of Object.values(o)) {
+      extraerNegociosDeJson(val, sector, ciudad, max, seen, acc, depth + 1)
+      if (acc.length >= max) break
+    }
+  }
+  return acc
+}
+
+function extraerListingsHtmlPA(html: string, sector: string, ciudad: string, max: number): NegocioEncontrado[] {
+  const acc: NegocioEncontrado[] = []
+  const seen = new Set<string>()
+  // Try <article> blocks first, then <li> blocks
+  const blockRx = [/<article[^>]*>([\s\S]*?)<\/article>/gi, /<li[^>]*class="[^"]*(?:listing|result|item|negocio)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi]
+  for (const rx of blockRx) {
+    for (const m of html.matchAll(rx)) {
+      if (acc.length >= max) break
+      const blk = m[1]
+      const nm = blk.match(/<h[123][^>]*>([^<]{3,80})<\/h[123]>/i) ||
+                 blk.match(/class="[^"]*(?:name|title|heading|negocio|empresa)[^"]*"[^>]*>([^<]{3,80})</)
+      if (!nm) continue
+      const nombre = decodeHtmlEntities(nm[1].trim())
+      if (!nombre || nombre.length < 3) continue
+      const key = nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
+      if (seen.has(key)) continue
+      seen.add(key)
+      const ph = blk.match(/(\+?34?\s*\d[\d\s.-]{7,})/i)
+      const wb = blk.match(/href="(https?:\/\/(?!(?:www\.paginasamarillas|google|facebook|twitter))[^"]{8,80})"/)
+      const ad = blk.match(/<address[^>]*>([^<]{5,100})<\/address>/i) ||
+                 blk.match(/class="[^"]*(?:address|direccion)[^"]*"[^>]*>([^<]{5,100})</)
+      acc.push({
+        place_id: `pa-html-${Buffer.from(nombre + ciudad).toString('hex').slice(0, 16)}`,
+        nombre,
+        direccion: ad ? decodeHtmlEntities(ad[1].trim()) : ciudad,
+        ciudad,
+        telefono: ph ? formatTelefonoPa(ph[1]) : null,
+        web: wb ? wb[1] : null,
+        email_encontrado: null,
+        rating: null,
+        sector,
+      })
+    }
+    if (acc.length > 0) break
+  }
+  return acc
+}
+
+async function buscarEnPaginasAmarillas(sector: string, ciudad: string, max: number): Promise<NegocioEncontrado[]> {
+  const paQuery = getSectorPA(sector)
+  if (!paQuery) return []
+
+  const ciudadNorm = normalizarCiudadPA(ciudad)
+  const url = `https://www.paginasamarillas.es/search/${paQuery}/${ciudadNorm}/`
+  console.log(`[PA] ${url}`)
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'es-ES,es;q=0.9',
+        'Referer': 'https://www.paginasamarillas.es/',
+      },
+      signal: AbortSignal.timeout(18000),
+    })
+    if (!res.ok) { console.log(`[PA] HTTP ${res.status}`); return [] }
+    const html = await res.text()
+    console.log(`[PA] ${html.length} bytes`)
+
+    const seen = new Set<string>()
+
+    // Strategy 1: __NEXT_DATA__ (Next.js SSR)
+    const ndm = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
+    if (ndm) {
+      try {
+        const nd = JSON.parse(ndm[1])
+        const r = extraerNegociosDeJson(nd, sector, ciudad, max, seen)
+        if (r.length > 0) { console.log(`[PA] ${r.length} de __NEXT_DATA__`); return r }
+      } catch { /* ignore */ }
+    }
+
+    // Strategy 2: JSON-LD schema.org
+    const ldNegocios: NegocioEncontrado[] = []
+    for (const block of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi)) {
+      if (ldNegocios.length >= max) break
+      try {
+        const d = JSON.parse(block[1])
+        const items = [d, ...(d['@graph'] || []), ...(Array.isArray(d) ? d : [])]
+        for (const item of items) {
+          if (ldNegocios.length >= max) break
+          const tipo = String(item['@type'] || '')
+          if (!['LocalBusiness','Organization','Store','FoodEstablishment','Restaurant','MedicalOrganization'].some(t => tipo.includes(t))) continue
+          const nombre = item.name?.trim()
+          if (!nombre || nombre.length < 3) continue
+          const key = nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
+          if (seen.has(key)) continue
+          seen.add(key)
+          const dir = item.address?.streetAddress || item.address || ciudad
+          ldNegocios.push({
+            place_id: `pa-ld-${Buffer.from(nombre + ciudad).toString('hex').slice(0, 16)}`,
+            nombre,
+            direccion: typeof dir === 'string' ? dir : ciudad,
+            ciudad,
+            telefono: item.telephone ? formatTelefonoPa(String(item.telephone)) : null,
+            web: typeof item.url === 'string' ? item.url : null,
+            email_encontrado: typeof item.email === 'string' ? item.email.toLowerCase() : null,
+            rating: item.aggregateRating?.ratingValue ?? null,
+            sector,
+          })
+        }
+      } catch { /* ignore */ }
+    }
+    if (ldNegocios.length > 0) { console.log(`[PA] ${ldNegocios.length} de JSON-LD`); return ldNegocios }
+
+    // Strategy 3: HTML article/li parsing
+    const htmlNegocios = extraerListingsHtmlPA(html, sector, ciudad, max)
+    console.log(`[PA] ${htmlNegocios.length} del HTML`)
+    return htmlNegocios
+
+  } catch (err) {
+    console.log(`[PA] Error: ${String(err).slice(0, 100)}`)
+    return []
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
    FUNCIÓN PRINCIPAL
    ═══════════════════════════════════════════════════════ */
 export async function buscarNegociosEnGoogleMaps(params: {
@@ -290,31 +521,46 @@ export async function buscarNegociosEnGoogleMaps(params: {
 }): Promise<NegocioEncontrado[]> {
   const { sector, ciudad, radio, maxResultados = 20 } = params
 
-  // 1. Intentar Overpass si hay keys OSM para este sector
-  const osmKeys = getSectorOsmKeys(sector)
-  if (osmKeys) {
-    const coords = await geocodificarCiudad(ciudad)
-    if (coords) {
+  // 1. Correr OSM y Páginas Amarillas en paralelo
+  const [osmNegocios, paNegocios] = await Promise.all([
+    // Track OSM/Overpass
+    (async (): Promise<NegocioEncontrado[]> => {
+      const osmKeys = getSectorOsmKeys(sector)
+      if (!osmKeys) return []
+      const coords = await geocodificarCiudad(ciudad)
+      if (!coords) return []
       const rawEls = await buscarEnOverpass(osmKeys, coords.lat, coords.lon, radio, maxResultados)
-      const elements = rawEls.filter(el => {
-        const t = (el.tags || {}) as Record<string, string>
-        return t.name?.trim()
-      }).slice(0, maxResultados)
-
+      const elements = rawEls.filter(el => ((el.tags || {}) as Record<string, string>).name?.trim()).slice(0, maxResultados)
       console.log(`[Overpass] ${elements.length} negocios para "${sector}" en ${ciudad}`)
-
-      if (elements.length > 0) {
-        const negocios: NegocioEncontrado[] = []
-        for (const el of elements) {
-          const neg = await osmElementToNegocio(el, sector, ciudad)
-          if (neg) negocios.push(neg)
-        }
-        return negocios
+      const negocios: NegocioEncontrado[] = []
+      for (const el of elements) {
+        const neg = await osmElementToNegocio(el, sector, ciudad)
+        if (neg) negocios.push(neg)
       }
+      return negocios
+    })(),
+    // Track Páginas Amarillas
+    buscarEnPaginasAmarillas(sector, ciudad, maxResultados),
+  ])
+
+  // 2. Merge deduplicando por nombre (OSM primero — tiene más datos de contacto)
+  const seen = new Set<string>()
+  const merged: NegocioEncontrado[] = []
+  for (const neg of [...osmNegocios, ...paNegocios]) {
+    const key = neg.nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push(neg)
     }
+    if (merged.length >= maxResultados) break
   }
 
-  // 2. Fallback: DuckDuckGo + scraping de directorios
-  console.log(`[Captia] Sin datos OSM para "${sector}" — usando fallback DuckDuckGo`)
+  if (merged.length > 0) {
+    console.log(`[Captia] ${merged.length} negocios totales (OSM:${osmNegocios.length} + PA:${paNegocios.length})`)
+    return merged
+  }
+
+  // 3. Fallback: DuckDuckGo + scraping de directorios
+  console.log(`[Captia] Sin resultados OSM/PA — usando fallback DuckDuckGo`)
   return buscarEnDirectorios(sector, ciudad, maxResultados)
 }
