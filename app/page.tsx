@@ -54,7 +54,7 @@ const STEPS: Step[] = [
   {
     botMsg: '', // se rellena con next del anterior
     field:  'sector',
-    input:  { type: 'sectors' },
+    input:  { type: 'text', placeholder: 'Ej: Fontanero, Gestoría, Clínica dental, Agencia de marketing...' },
     next:   (v) => `Perfecto. Ahora cuéntame qué hacéis exactamente en ${v}. Sé concreto — así los emails serán más naturales.`,
   },
   {
