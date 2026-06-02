@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { buscarNegociosEnGoogleMaps } from '@/lib/google-places'
-import { generarEmailOutreach } from '@/lib/gemini'
+
+export const maxDuration = 60 // Overpass + scraping puede tardar
 
 const H = { 'Content-Type': 'application/json' }
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
       .from('captia_negocios').select('*').eq('id', negocio_id).single()
     if (negErr || !negocio) return new Response(JSON.stringify({ error: 'Negocio no encontrado' }), { status: 404, headers: H })
 
-    // Buscamos en Google Maps negocios que puedan ser clientes potenciales
+    // Buscamos negocios que puedan ser clientes potenciales
     const encontrados = await buscarNegociosEnGoogleMaps({
       sector: negocio.cliente_ideal,
       ciudad: negocio.ciudad,
@@ -34,22 +35,6 @@ export async function POST(req: NextRequest) {
         .from('captia_contactos').select('id').eq('place_id', lugar.place_id).maybeSingle()
       if (existe) continue
 
-      // Intentamos generar email de outreach con Gemini
-      let emailGenerado = null
-      if (lugar.web || lugar.telefono) {
-        try {
-          emailGenerado = await generarEmailOutreach({
-            negocioOrigen: negocio.nombre,
-            sectorOrigen: negocio.sector,
-            descripcionOrigen: negocio.descripcion,
-            nombreDestino: lugar.nombre,
-            sectorDestino: lugar.sector,
-            ciudadDestino: lugar.ciudad,
-            tono: negocio.tono,
-          })
-        } catch { /* Continuamos aunque falle Gemini */ }
-      }
-
       const { data: contacto } = await db
         .from('captia_contactos')
         .insert({
@@ -61,7 +46,7 @@ export async function POST(req: NextRequest) {
           telefono: lugar.telefono,
           web: lugar.web,
           rating: lugar.rating,
-          sector: lugar.sector,
+          sector: negocio.sector, // sector corto, no el cliente_ideal largo
           email_encontrado: lugar.email_encontrado,
           estado: 'nuevo',
         })
@@ -70,7 +55,7 @@ export async function POST(req: NextRequest) {
 
       if (contacto) {
         nuevos++
-        contactosInsertados.push({ ...contacto, emailGenerado })
+        contactosInsertados.push(contacto)
       }
     }
 

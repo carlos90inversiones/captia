@@ -3,6 +3,12 @@
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
+function decodeHtml(str: string): string {
+  return str
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+}
+
 type Negocio = { id: string; nombre: string; sector: string; ciudad: string; cliente_ideal: string; tono: string; email: string }
 type Contacto = { id: string; nombre: string; ciudad: string; sector: string; estado: string; telefono: string | null; web: string | null; email_encontrado: string | null; rating: number | null; ultimo_contacto: string | null }
 type Stats = { total: number; nuevos: number; email_enviado: number; seguimiento: number; respondio: number }
@@ -251,14 +257,14 @@ function DashboardInner() {
                       <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                          <span className="text-sm font-semibold text-zinc-100">{c.nombre}</span>
+                          <span className="text-sm font-semibold text-zinc-100">{decodeHtml(c.nombre)}</span>
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${cfg.color}`}>{cfg.label}</span>
                           {c.rating && <span className="text-[10px] text-amber-400">★ {c.rating}</span>}
                         </div>
                         <p className="text-xs text-zinc-500 truncate">
                           {[
                             c.ciudad,
-                            c.sector,
+                            c.sector?.length > 30 ? c.sector.slice(0, 30) + '…' : c.sector,
                             c.telefono,
                           ].filter(Boolean).join(' · ')}
                           {c.web && <> · <a href={c.web} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 transition-colors">{c.web.replace(/^https?:\/\//, '').split('/')[0]}</a></>}

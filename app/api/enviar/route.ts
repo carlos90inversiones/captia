@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { generarEmailOutreach } from '@/lib/gemini'
 import { Resend } from 'resend'
 
+export const maxDuration = 60 // Vercel: permite hasta 60s para generar emails con IA
+
 const H = { 'Content-Type': 'application/json' }
 
 export async function POST(req: NextRequest) {
@@ -25,12 +27,13 @@ export async function POST(req: NextRequest) {
       query = query.eq('estado', 'nuevo').not('email_encontrado', 'is', null)
     }
 
-    const { data: contactos } = await query.limit(10) // máx 10 por llamada
+    const { data: contactos } = await query.limit(5) // máx 5 por batch para no saturar Gemini
     if (!contactos?.length) {
       return new Response(JSON.stringify({ enviados: 0, mensaje: 'No hay contactos con email para enviar' }), { status: 200, headers: H })
     }
 
     let enviados = 0
+    const errores: string[] = []
     for (const contacto of contactos) {
       try {
         // Generamos el email con Gemini
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
         })
 
         // Enviamos con Resend
-        await resend.emails.send({
+        const envioRes = await resend.emails.send({
           from: `${negocio.nombre} <captia@marsof.es>`,
           to: contacto.email_encontrado!,
           replyTo: negocio.email,
@@ -54,6 +57,7 @@ export async function POST(req: NextRequest) {
             ${email.cuerpo.replace(/\n/g, '<br/>')}
           </div>`,
         })
+        if (envioRes.error) throw new Error(`Resend: ${JSON.stringify(envioRes.error)}`)
 
         // Registramos el envío
         await db.from('captia_envios').insert({
@@ -71,12 +75,17 @@ export async function POST(req: NextRequest) {
         }).eq('id', contacto.id)
 
         enviados++
+        // Pausa entre llamadas a Gemini para evitar rate limit (free tier: 15 RPM)
+        await new Promise(r => setTimeout(r, 4500))
       } catch (err) {
-        console.error(`[enviar] error con contacto ${contacto.id}:`, err)
+        const msg = `${contacto.nombre}: ${String(err).slice(0, 150)}`
+        console.error(`[enviar] ${msg}`)
+        errores.push(msg)
+        await new Promise(r => setTimeout(r, 4500))
       }
     }
 
-    return new Response(JSON.stringify({ enviados }), { status: 200, headers: H })
+    return new Response(JSON.stringify({ enviados, errores }), { status: 200, headers: H })
   } catch (err) {
     console.error('[enviar POST]', err)
     return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: H })
