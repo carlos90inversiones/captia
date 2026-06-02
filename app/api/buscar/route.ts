@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
           web: lugar.web,
           rating: lugar.rating,
           sector: lugar.sector,
+          email_encontrado: lugar.email_encontrado,
           estado: 'nuevo',
         })
         .select('id')

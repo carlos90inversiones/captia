@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
           negocio_id: negocio.id, place_id: lugar.place_id,
           nombre: lugar.nombre, direccion: lugar.direccion, ciudad: lugar.ciudad,
           telefono: lugar.telefono, web: lugar.web, rating: lugar.rating, sector: lugar.sector,
+          email_encontrado: lugar.email_encontrado,
         })
         totalBuscados++
       }
