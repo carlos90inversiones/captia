@@ -21,22 +21,48 @@ interface SectorConfig {
 }
 
 const SECTOR_CONFIG: SectorConfig[] = [
+  // ── Hostelería ──
   { keywords: ['restauran', 'comida', 'gastro', 'cocina', 'tapas'], osmKeys: [['amenity', 'restaurant']] },
   { keywords: ['cafeter', 'café', 'cafe', 'bar', 'bares', 'cervecería', 'pub'], osmKeys: [['amenity', 'cafe'], ['amenity', 'bar'], ['amenity', 'pub']] },
-  { keywords: ['peluquer', 'barbería', 'barberia', 'estética', 'estetica', 'cosmética'], osmKeys: [['shop', 'hairdresser'], ['shop', 'beauty']] },
   { keywords: ['hotel', 'hostal', 'alojamiento', 'turístico', 'rural', 'apartamento turístico'], osmKeys: [['tourism', 'hotel'], ['tourism', 'hostel'], ['tourism', 'guest_house'], ['tourism', 'apartment']] },
-  { keywords: ['médico', 'medico', 'clínica', 'clinica', 'doctor', 'consultor'], osmKeys: [['amenity', 'doctors'], ['amenity', 'clinic'], ['healthcare', 'doctor']] },
+  // ── Salud ──
+  { keywords: ['médico', 'medico', 'clínica', 'clinica', 'doctor', 'consultor médic'], osmKeys: [['amenity', 'doctors'], ['amenity', 'clinic'], ['healthcare', 'doctor']] },
   { keywords: ['dentist', 'dental', 'odontol'], osmKeys: [['amenity', 'dentist']] },
   { keywords: ['farmaci'], osmKeys: [['amenity', 'pharmacy']] },
-  { keywords: ['gimnasio', 'fitness', 'crossfit', 'sport'], osmKeys: [['leisure', 'fitness_centre'], ['leisure', 'sports_centre']] },
-  { keywords: ['inmobiliar', 'pisos', 'alquiler de piso'], osmKeys: [['office', 'estate_agent']] },
-  { keywords: ['fontaner', 'plomero'], osmKeys: [['craft', 'plumber']] },
-  { keywords: ['electric'], osmKeys: [['craft', 'electrician']] },
-  { keywords: ['taller', 'mecánic', 'mecanico', 'coches', 'automóvil'], osmKeys: [['shop', 'car_repair'], ['amenity', 'car_repair']] },
+  { keywords: ['fisioter', 'fisio'], osmKeys: [['amenity', 'physiotherapist'], ['healthcare', 'physiotherapist']] },
+  { keywords: ['psicolog', 'terapeuta', 'psiquiat'], osmKeys: [['amenity', 'therapist'], ['healthcare', 'psychotherapist']] },
+  { keywords: ['veterinar', 'clínica veterinaria'], osmKeys: [['amenity', 'veterinary']] },
+  { keywords: ['óptica', 'optica'], osmKeys: [['shop', 'optician']] },
+  // ── Belleza ──
+  { keywords: ['peluquer', 'barbería', 'barberia'], osmKeys: [['shop', 'hairdresser'], ['shop', 'barber']] },
+  { keywords: ['estética', 'estetica', 'cosmética', 'cosmetica', 'belleza', 'spa'], osmKeys: [['shop', 'beauty'], ['leisure', 'spa']] },
+  { keywords: ['gimnasio', 'fitness', 'crossfit', 'pilates', 'yoga'], osmKeys: [['leisure', 'fitness_centre'], ['leisure', 'sports_centre']] },
+  // ── Retail ──
+  { keywords: ['inmobiliar', 'pisos', 'alquiler de piso', 'agencia inmobiliaria'], osmKeys: [['office', 'estate_agent']] },
   { keywords: ['supermercado', 'alimentaci'], osmKeys: [['shop', 'supermarket'], ['shop', 'convenience']] },
   { keywords: ['tienda ropa', 'moda', ' ropa', 'boutique'], osmKeys: [['shop', 'clothes'], ['shop', 'fashion']] },
-  { keywords: ['fisioter', 'fisio'], osmKeys: [['amenity', 'physiotherapist'], ['healthcare', 'physiotherapist']] },
-  { keywords: ['academia', 'clases particular', 'formación', 'formacion'], osmKeys: [['amenity', 'language_school'], ['amenity', 'school']] },
+  { keywords: ['florist', 'flores'], osmKeys: [['shop', 'florist']] },
+  { keywords: ['librería', 'libreria', 'papelería'], osmKeys: [['shop', 'books'], ['shop', 'stationery']] },
+  { keywords: ['joyería', 'joyeria', 'relojería'], osmKeys: [['shop', 'jewelry']] },
+  { keywords: ['panadería', 'panaderia', 'pastelería', 'pasteleria'], osmKeys: [['shop', 'bakery']] },
+  // ── Oficios ──
+  { keywords: ['fontaner', 'plomero'], osmKeys: [['craft', 'plumber']] },
+  { keywords: ['electric'], osmKeys: [['craft', 'electrician']] },
+  { keywords: ['carpinter'], osmKeys: [['craft', 'carpenter']] },
+  { keywords: ['pintor', 'pintura'], osmKeys: [['craft', 'painter']] },
+  { keywords: ['taller', 'mecánic', 'mecanico', 'coches', 'automóvil'], osmKeys: [['shop', 'car_repair'], ['amenity', 'car_repair']] },
+  // ── Educación ──
+  { keywords: ['academia', 'clases particular', 'formación', 'formacion', 'idiomas'], osmKeys: [['amenity', 'language_school'], ['amenity', 'college']] },
+  { keywords: ['guardería', 'guarderia', 'infantil', 'escuela infantil'], osmKeys: [['amenity', 'kindergarten']] },
+  // ── B2B / Servicios profesionales ──
+  { keywords: ['gestor', 'gestoría', 'gestoria', 'asesor', 'asesoría', 'asesoria', 'fiscal', 'contabilidad', 'contable', 'laboral'], osmKeys: [['office', 'accountant'], ['office', 'tax_advisor']] },
+  { keywords: ['abogado', 'abogados', 'jurídico', 'juridico', 'derecho', 'notario', 'despacho legal'], osmKeys: [['office', 'lawyer'], ['amenity', 'lawyer']] },
+  { keywords: ['arquitecto', 'arquitectura', 'obra', 'diseño de interiores', 'reformas'], osmKeys: [['office', 'architect']] },
+  { keywords: ['seguro', 'seguros', 'correduría de seguros', 'agente de seguros'], osmKeys: [['office', 'insurance']] },
+  { keywords: ['informática', 'informatica', 'software', 'tecnología', 'tecnologia', 'desarrollo web', 'it ', 'programad'], osmKeys: [['office', 'it'], ['office', 'software']] },
+  { keywords: ['marketing', 'publicidad', 'agencia de comunicación', 'comunicación digital', 'diseño gráfico'], osmKeys: [['office', 'marketing'], ['office', 'advertising_agency']] },
+  { keywords: ['consultor', 'consultora', 'consultoría', 'consultoria'], osmKeys: [['office', 'company'], ['office', 'consulting']] },
+  { keywords: ['empresa de limpieza', 'limpieza de oficinas', 'servicio de limpieza'], osmKeys: [['shop', 'cleaning']] },
 ]
 
 function getSectorOsmKeys(sector: string): Array<[string, string | null]> | null {
