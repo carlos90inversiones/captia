@@ -225,53 +225,96 @@ function DashboardInner() {
 
           {/* ── Vista Ajustes ── */}
           {vista === 'ajustes' && formAjustes && (
-            <div className="px-8 py-6 max-w-2xl">
-              <p className="text-xs text-zinc-500 mb-6">Los cambios se aplican a los próximos emails que genere la IA. Los ya enviados no se modifican.</p>
+            <div className="px-8 py-6">
+              <p className="text-xs text-zinc-500 mb-8">Los cambios se aplican a los próximos emails que genere la IA. Los ya enviados no se modifican.</p>
 
-              {([
-                { key: 'nombre',       label: 'Nombre del negocio',    placeholder: 'Ej: Marsof Technology',     type: 'text',     multi: false },
-                { key: 'sector',       label: 'Sector',                placeholder: 'Ej: Tecnología, Fontanero…', type: 'text',    multi: false },
-                { key: 'descripcion',  label: 'Descripción',           placeholder: 'Qué hacéis exactamente…',   type: 'text',     multi: true  },
-                { key: 'ciudad',       label: 'Ciudad de búsqueda',    placeholder: 'Ej: Madrid, Sevilla…',      type: 'text',     multi: false },
-                { key: 'cliente_ideal',label: 'Cliente ideal',         placeholder: 'Quiénes son tus clientes…', type: 'text',     multi: true  },
-                { key: 'email',        label: 'Email de respuestas',   placeholder: 'tu@empresa.com',            type: 'email',    multi: false },
-                { key: 'telefono',     label: 'Teléfono WhatsApp',     placeholder: '612 345 678 (opcional)',    type: 'tel',      multi: false },
-              ] as const).map(({ key, label, placeholder, type, multi }) => (
-                <div key={key} className="mb-5">
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">{label}</label>
-                  {multi ? (
-                    <textarea rows={3} placeholder={placeholder}
-                      value={(formAjustes as Record<string, string | null>)[key] ?? ''}
-                      onChange={e => setFormAjustes(f => f ? { ...f, [key]: e.target.value } : f)}
-                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all resize-none font-sans" />
-                  ) : (
-                    <input type={type} placeholder={placeholder}
-                      value={(formAjustes as Record<string, string | null>)[key] ?? ''}
-                      onChange={e => setFormAjustes(f => f ? { ...f, [key]: e.target.value } : f)}
-                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
-                  )}
-                </div>
-              ))}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-5">
 
-              <div className="mb-5">
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Tono de emails</label>
-                <div className="flex gap-3">
-                  {[
-                    { v: 'cercano',     l: 'Cercano',     e: '👋' },
-                    { v: 'profesional', l: 'Profesional', e: '💼' },
-                    { v: 'divertido',   l: 'Divertido',   e: '🎯' },
-                  ].map(t => (
-                    <button key={t.v} onClick={() => setFormAjustes(f => f ? { ...f, tono: t.v } : f)}
-                      className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border text-sm font-medium transition-all ${
-                        formAjustes.tono === t.v
-                          ? 'border-violet-500 bg-violet-500/10 text-violet-300'
-                          : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600'
-                      }`}>
-                      <span className="text-lg">{t.e}</span>
-                      <span>{t.l}</span>
-                    </button>
-                  ))}
+                {/* Nombre */}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Nombre del negocio</label>
+                  <input type="text" placeholder="Ej: Marsof Technology"
+                    value={formAjustes.nombre ?? ''}
+                    onChange={e => setFormAjustes(f => f ? { ...f, nombre: e.target.value } : f)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
                 </div>
+
+                {/* Sector */}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Sector</label>
+                  <input type="text" placeholder="Ej: Tecnología, Fontanero…"
+                    value={formAjustes.sector ?? ''}
+                    onChange={e => setFormAjustes(f => f ? { ...f, sector: e.target.value } : f)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+
+                {/* Descripción — ancho completo */}
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Descripción</label>
+                  <textarea rows={3} placeholder="Qué hacéis exactamente…"
+                    value={formAjustes.descripcion ?? ''}
+                    onChange={e => setFormAjustes(f => f ? { ...f, descripcion: e.target.value } : f)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all resize-none font-sans" />
+                </div>
+
+                {/* Ciudad */}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Ciudad de búsqueda</label>
+                  <input type="text" placeholder="Ej: Madrid, Sevilla…"
+                    value={formAjustes.ciudad ?? ''}
+                    onChange={e => setFormAjustes(f => f ? { ...f, ciudad: e.target.value } : f)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Email de respuestas</label>
+                  <input type="email" placeholder="tu@empresa.com"
+                    value={formAjustes.email ?? ''}
+                    onChange={e => setFormAjustes(f => f ? { ...f, email: e.target.value } : f)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+
+                {/* Cliente ideal — ancho completo */}
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Cliente ideal</label>
+                  <textarea rows={3} placeholder="Quiénes son tus clientes…"
+                    value={formAjustes.cliente_ideal ?? ''}
+                    onChange={e => setFormAjustes(f => f ? { ...f, cliente_ideal: e.target.value } : f)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all resize-none font-sans" />
+                </div>
+
+                {/* Teléfono */}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Teléfono WhatsApp</label>
+                  <input type="tel" placeholder="612 345 678 (opcional)"
+                    value={formAjustes.telefono ?? ''}
+                    onChange={e => setFormAjustes(f => f ? { ...f, telefono: e.target.value } : f)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                </div>
+
+                {/* Tono — ancho completo */}
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Tono de emails</label>
+                  <div className="flex gap-3">
+                    {[
+                      { v: 'cercano',     l: 'Cercano',     e: '👋' },
+                      { v: 'profesional', l: 'Profesional', e: '💼' },
+                      { v: 'divertido',   l: 'Divertido',   e: '🎯' },
+                    ].map(t => (
+                      <button key={t.v} onClick={() => setFormAjustes(f => f ? { ...f, tono: t.v } : f)}
+                        className={`flex items-center gap-2.5 px-5 py-3 rounded-xl border text-sm font-medium transition-all ${
+                          formAjustes.tono === t.v
+                            ? 'border-violet-500 bg-violet-500/10 text-violet-300'
+                            : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600'
+                        }`}>
+                        <span className="text-lg">{t.e}</span>
+                        <span>{t.l}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
           )}
