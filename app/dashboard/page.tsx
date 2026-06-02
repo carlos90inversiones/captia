@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 function decodeHtml(str: string): string {
@@ -30,9 +30,20 @@ function av(name: string) {
   return AV[i]
 }
 
+function tiempoRelativo(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return 'ahora mismo'
+  if (min < 60) return `hace ${min}min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `hace ${h}h`
+  return `hace ${Math.floor(h / 24)}d`
+}
+
 type Negocio = { id: string; nombre: string; sector: string; descripcion: string; ciudad: string; cliente_ideal: string; tono: string; email: string; telefono: string | null }
 type Contacto = { id: string; nombre: string; ciudad: string; sector: string; estado: string; telefono: string | null; web: string | null; email_encontrado: string | null; rating: number | null; ultimo_contacto: string | null }
 type Stats = { total: number; nuevos: number; email_enviado: number; seguimiento: number; respondio: number; abiertos: number; bajas: number }
+type Notif = { id: string; nombre: string; estado: string; telefono: string | null; ts: string }
 
 const EC: Record<string, { label: string; bg: string; color: string; bc: string; dot: string }> = {
   nuevo:         { label: 'Nuevo',          bg: 'rgba(113,113,122,.12)', color: '#a1a1aa', bc: 'rgba(113,113,122,.2)',  dot: '#71717a' },
@@ -46,17 +57,22 @@ const EC: Record<string, { label: string; bg: string; color: string; bc: string;
 }
 
 /* ── SVG icons ── */
-const IcoGrid = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="8.5" y="1" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="1" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/></svg>
-const IcoUsers = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="5.5" cy="5" r="3" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 13c0-2.485 1.79-4.5 4-4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="11" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.2"/><path d="M13.5 13c0-1.657-1.119-3-2.5-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-const IcoMail = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1" y="3" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5l6.5 4L14 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-const IcoGear = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="2.2" stroke="currentColor" strokeWidth="1.3"/><path d="M7.5 1v1.4M7.5 12.1V13.5M1 7.5h1.4M12.1 7.5H13.5M2.87 2.87l.99.99M11.14 11.14l.99.99M11.14 3.86l.99-.99M2.87 12.13l.99-.99" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+const IcoGrid   = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="8.5" y="1" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="1" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+const IcoUsers  = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="5.5" cy="5" r="3" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 13c0-2.485 1.79-4.5 4-4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="11" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.2"/><path d="M13.5 13c0-1.657-1.119-3-2.5-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const IcoMail   = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1" y="3" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5l6.5 4L14 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+const IcoGear   = () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="2.2" stroke="currentColor" strokeWidth="1.3"/><path d="M7.5 1v1.4M7.5 12.1V13.5M1 7.5h1.4M12.1 7.5H13.5M2.87 2.87l.99.99M11.14 11.14l.99.99M11.14 3.86l.99-.99M2.87 12.13l.99-.99" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
 const IcoSearch = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-const IcoSend = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.5 1.5L1 6.5l5 2 1.5 5L12.5 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M6 8.5l3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-const IcoGlobe = () => <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5.5 1c-1 1.5-1 7 0 9M5.5 1c1 1.5 1 7 0 9" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5.5h9" stroke="currentColor" strokeWidth="1.2"/></svg>
-const IcoPhone = () => <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2.5 1h2.2l.8 2.2L4.2 4.5s.7 2 2.3 2.3L7.8 5.5 10 6.3v2.2C10 9.3 9.3 10 8.5 10 4.3 10 1 6.7 1 2.5 1 1.7 1.7 1 2.5 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-const IcoAt = () => <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.2"/><path d="M9.5 5.5a4 4 0 11-3.3-3.94" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-const IcoStar = () => <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M5 1l1.03 2.09 2.3.33-1.67 1.63.39 2.3L5 6.13 3 7.35l.39-2.3L1.72 3.42l2.3-.33L5 1z"/></svg>
-const IcoTrend = () => <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 9l3-3 2.5 2L10 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M8 3h2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+const IcoSend   = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.5 1.5L1 6.5l5 2 1.5 5L12.5 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M6 8.5l3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+const IcoGlobe  = () => <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5.5 1c-1 1.5-1 7 0 9M5.5 1c1 1.5 1 7 0 9" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5.5h9" stroke="currentColor" strokeWidth="1.2"/></svg>
+const IcoPhone  = () => <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2.5 1h2.2l.8 2.2L4.2 4.5s.7 2 2.3 2.3L7.8 5.5 10 6.3v2.2C10 9.3 9.3 10 8.5 10 4.3 10 1 6.7 1 2.5 1 1.7 1.7 1 2.5 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+const IcoAt     = () => <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.2"/><path d="M9.5 5.5a4 4 0 11-3.3-3.94" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const IcoStar   = () => <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M5 1l1.03 2.09 2.3.33-1.67 1.63.39 2.3L5 6.13 3 7.35l.39-2.3L1.72 3.42l2.3-.33L5 1z"/></svg>
+const IcoTrend  = () => <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 9l3-3 2.5 2L10 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M8 3h2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+const IcoTable  = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5h12M5 5v8" stroke="currentColor" strokeWidth="1.3"/></svg>
+const IcoKanban = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="3.5" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="5.25" y="1" width="3.5" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="9.5" y="1" width="3.5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+const IcoDownload = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M1 10v1.5A1.5 1.5 0 002.5 13h9a1.5 1.5 0 001.5-1.5V10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+const IcoSparkle = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.8H12L8.9 7l1.2 3.8L7 9l-3.1 1.8L5.1 7 2 4.8h3.8L7 1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+const IcoBell   = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1.5A3.5 3.5 0 003 5v3L1.5 9.5h10L10 8V5A3.5 3.5 0 006.5 1.5z" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 11a1 1 0 002 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
 
 const CSS = `
   *{box-sizing:border-box}
@@ -64,6 +80,8 @@ const CSS = `
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
   @keyframes toastIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+  @keyframes notifIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  @keyframes barGrow{from{height:0}to{height:var(--h)}}
   .fu{animation:fadeUp .3s ease both}
   .spin{animation:spin .75s linear infinite}
   .pulse{animation:pulse 2.2s ease-in-out infinite}
@@ -79,11 +97,14 @@ const CSS = `
   .tb{transition:color .15s,border-color .15s}
   .tn{transition:all .15s}
   .tn:hover{border-color:rgba(139,92,246,.4)!important}
+  .kc{transition:background .1s}
+  .kc:hover{background:rgba(255,255,255,.03)!important}
   input:focus,textarea:focus{border-color:rgba(139,92,246,.5)!important;box-shadow:0 0 0 3px rgba(139,92,246,.1)!important;outline:none}
   ::-webkit-scrollbar{width:4px}
   ::-webkit-scrollbar-track{background:transparent}
   ::-webkit-scrollbar-thumb{background:#27272a;border-radius:4px}
   ::-webkit-scrollbar-thumb:hover{background:#3f3f46}
+  a{color:inherit;text-decoration:none}
 `
 
 function Spinner() {
@@ -99,11 +120,16 @@ function DashboardInner() {
   const [stats, setStats] = useState<Stats>({ total: 0, nuevos: 0, email_enviado: 0, seguimiento: 0, respondio: 0, abiertos: 0, bajas: 0 })
   const [buscando, setBuscando] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const [enriqueciendo, setEnriqueciendo] = useState(false)
   const [guardandoAjustes, setGuardandoAjustes] = useState(false)
   const [toast, setToast] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null)
   const [tab, setTab] = useState<'todos' | 'nuevos' | 'abiertos' | 'respondio'>('todos')
   const [vista, setVista] = useState<'dashboard' | 'ajustes'>('dashboard')
+  const [vistaTabla, setVistaTabla] = useState<'tabla' | 'kanban'>('tabla')
   const [formAjustes, setFormAjustes] = useState<Negocio | null>(null)
+  const [notifs, setNotifs] = useState<Notif[]>([])
+  const notifSeenRef = useRef<Set<string>>(new Set())
+  const lastCheckRef = useRef(new Date(Date.now() - 60 * 60 * 1000).toISOString()) // last hour on first load
 
   const showToast = (tipo: 'ok' | 'error', texto: string) => {
     setToast({ tipo, texto })
@@ -132,8 +158,29 @@ function DashboardInner() {
     })
   }, [negocioId])
 
+  const cargarActividad = useCallback(async () => {
+    if (!negocioId) return
+    try {
+      const res = await fetch(`/api/actividad?negocio_id=${negocioId}&since=${encodeURIComponent(lastCheckRef.current)}`)
+      const data = await res.json()
+      const nuevos: Notif[] = (data.actividad || []).filter((a: Notif) => !notifSeenRef.current.has(a.id))
+      if (nuevos.length > 0) {
+        nuevos.forEach(a => notifSeenRef.current.add(a.id))
+        lastCheckRef.current = new Date().toISOString()
+        setNotifs(prev => [...nuevos, ...prev].slice(0, 5))
+        await cargarDatos()
+      }
+    } catch { /* ignore */ }
+  }, [negocioId, cargarDatos])
+
   useEffect(() => { cargarDatos() }, [cargarDatos])
   useEffect(() => { if (negocio) setFormAjustes(negocio) }, [negocio])
+  useEffect(() => {
+    if (!negocioId) return
+    cargarActividad()
+    const iv = setInterval(cargarActividad, 25000)
+    return () => clearInterval(iv)
+  }, [negocioId, cargarActividad])
 
   const buscarClientes = async () => {
     if (!negocioId) return
@@ -159,6 +206,22 @@ function DashboardInner() {
     finally { setEnviando(false) }
   }
 
+  const enriquecerEmails = async () => {
+    if (!negocioId) return
+    setEnriqueciendo(true)
+    try {
+      const res = await fetch('/api/enriquecer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ negocio_id: negocioId }) })
+      const data = await res.json()
+      if (data.enriquecidos > 0) {
+        showToast('ok', `✨ ${data.enriquecidos} emails nuevos encontrados${data.pendientes > 0 ? ` · ${data.pendientes} pendientes` : ''}`)
+        await cargarDatos()
+      } else {
+        showToast('ok', data.pendientes > 0 ? `No encontré más emails ahora. Quedan ${data.pendientes} por enriquecer.` : 'Todos los contactos ya tienen email 🎉')
+      }
+    } catch { showToast('error', 'Error al buscar emails.') }
+    finally { setEnriqueciendo(false) }
+  }
+
   const marcarRespondio = async (contactoId: string) => {
     try {
       await fetch('/api/contactos', {
@@ -169,6 +232,24 @@ function DashboardInner() {
       await cargarDatos()
       showToast('ok', '¡Marcado como respondió! 🎉')
     } catch { showToast('error', 'Error al actualizar.') }
+  }
+
+  const exportarCSV = () => {
+    const headers = ['Nombre', 'Estado', 'Ciudad', 'Email', 'Teléfono', 'Web', 'Rating', 'Último contacto']
+    const rows = contactos.map(c => [
+      c.nombre, c.estado, c.ciudad,
+      c.email_encontrado || '', c.telefono || '', c.web || '',
+      c.rating?.toString() || '', c.ultimo_contacto ? new Date(c.ultimo_contacto).toLocaleDateString('es-ES') : '',
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `captia-leads-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast('ok', `${contactos.length} contactos exportados`)
   }
 
   const guardarAjustes = async () => {
@@ -187,8 +268,28 @@ function DashboardInner() {
     if (tab === 'nuevos') return c.estado === 'nuevo'
     if (tab === 'respondio') return c.estado === 'respondio'
     if (tab === 'abiertos') return c.estado === 'abierto'
-    return c.estado !== 'baja' // "todos" no muestra las bajas por defecto
+    return c.estado !== 'baja'
   })
+
+  // Analytics: opens per day last 7 days
+  const hoy = new Date()
+  const last7 = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(hoy); d.setDate(d.getDate() - (6 - i))
+    return d.toISOString().slice(0, 10)
+  })
+  const opensByDay = last7.map(day => ({
+    label: new Date(day + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short' }),
+    abiertos: contactos.filter(c => (c.estado === 'abierto' || c.estado === 'respondio') && c.ultimo_contacto?.slice(0, 10) === day).length,
+  }))
+  const maxBar = Math.max(...opensByDay.map(d => d.abiertos), 1)
+
+  // Kanban columns
+  const kanbanCols = [
+    { key: 'nuevos',      label: 'Sin contactar', color: '#71717a', estados: ['nuevo'] },
+    { key: 'contactados', label: 'Contactados',   color: '#3b82f6', estados: ['email_enviado', 'seguimiento_1', 'seguimiento_2'] },
+    { key: 'abrieron',   label: 'Abrieron',       color: '#0ea5e9', estados: ['abierto'] },
+    { key: 'respondieron',label: 'Respondieron',  color: '#10b981', estados: ['respondio'] },
+  ]
 
   if (!negocioId) return (
     <div style={{ minHeight: '100vh', background: '#080810', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -202,6 +303,7 @@ function DashboardInner() {
   const inp: React.CSSProperties = { width: '100%', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: '10px 14px', fontSize: 13.5, color: '#f4f4f5', fontFamily: 'inherit', transition: 'border-color .15s,box-shadow .15s' }
   const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }
   const gradBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', border: '1px solid rgba(139,92,246,.3)', color: '#fff', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', boxShadow: '0 4px 16px rgba(124,58,237,.3)' }
+  const ghostBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,.09)', background: 'rgba(255,255,255,.03)', color: '#71717a', fontSize: 13, fontWeight: 500, cursor: 'pointer' }
 
   return (
     <>
@@ -218,17 +320,12 @@ function DashboardInner() {
 
         {/* ── SIDEBAR ── */}
         <aside style={{ width: 240, flexShrink: 0, background: 'linear-gradient(180deg,#0d0d1a 0%,#0a0a14 100%)', borderRight: '1px solid rgba(255,255,255,.06)', display: 'flex', flexDirection: 'column', padding: '20px 12px', position: 'relative', overflow: 'hidden' }}>
-          {/* Orb bg */}
           <div style={{ position: 'absolute', top: -60, left: -40, width: 200, height: 200, background: 'radial-gradient(circle,rgba(124,58,237,.1) 0%,transparent 70%)', pointerEvents: 'none' }} />
-
-          {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px 0', marginBottom: 32, position: 'relative' }}>
             <div style={{ width: 34, height: 34, background: 'linear-gradient(135deg,#7c3aed,#4338ca)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0, boxShadow: '0 4px 16px rgba(124,58,237,.45)' }}>⚡</div>
             <span style={{ fontWeight: 700, fontSize: 16, color: '#fafafa', letterSpacing: '-0.3px' }}>Captia</span>
             <div style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', background: 'rgba(124,58,237,.18)', color: '#a78bfa', border: '1px solid rgba(124,58,237,.3)', borderRadius: 5, padding: '2px 6px' }}>BETA</div>
           </div>
-
-          {/* Nav */}
           <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {([
               { key: 'dashboard', label: 'Dashboard',  icon: <IcoGrid />,  disabled: false },
@@ -238,10 +335,7 @@ function DashboardInner() {
             ] as const).map(item => {
               const active = vista === item.key
               return (
-                <button key={item.key}
-                  onClick={() => !item.disabled && setVista(item.key as 'dashboard' | 'ajustes')}
-                  disabled={item.disabled}
-                  className="nb"
+                <button key={item.key} onClick={() => !item.disabled && setVista(item.key as 'dashboard' | 'ajustes')} disabled={item.disabled} className="nb"
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, border: 'none', cursor: item.disabled ? 'not-allowed' : 'pointer', textAlign: 'left', fontSize: 13.5, fontWeight: 500, background: active ? 'rgba(139,92,246,.12)' : 'transparent', color: item.disabled ? '#3f3f46' : active ? '#c4b5fd' : '#71717a', borderLeft: `2px solid ${active ? '#8b5cf6' : 'transparent'}` }}>
                   <span style={{ color: item.disabled ? '#2d2d35' : active ? '#8b5cf6' : '#52525b', display: 'flex', flexShrink: 0 }}>{item.icon}</span>
                   {item.label}
@@ -250,8 +344,6 @@ function DashboardInner() {
               )
             })}
           </nav>
-
-          {/* Business footer */}
           {negocio && (
             <div style={{ paddingTop: 16, borderTop: '1px solid rgba(255,255,255,.06)' }}>
               <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 10, padding: '10px 12px' }}>
@@ -261,7 +353,7 @@ function DashboardInner() {
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 12.5, fontWeight: 600, color: '#e4e4e7', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{negocio.nombre}</p>
-                    <p style={{ fontSize: 11, color: '#52525b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{negocio.ciudad}</p>
+                    <p style={{ fontSize: 11, color: '#52525b', margin: 0 }}>{negocio.ciudad}</p>
                   </div>
                 </div>
                 <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -296,10 +388,23 @@ function DashboardInner() {
             </div>
 
             {vista === 'dashboard' && (
-              <button onClick={buscarClientes} disabled={buscando || enviando} className="ab"
-                style={{ ...gradBtn, opacity: buscando || enviando ? 0.55 : 1, cursor: buscando || enviando ? 'not-allowed' : 'pointer' }}>
-                {buscando ? <><Spinner />Buscando...</> : <><IcoSearch />Buscar clientes</>}
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {/* Export CSV */}
+                <button onClick={exportarCSV} disabled={contactos.length === 0} className="ab"
+                  style={{ ...ghostBtn, opacity: contactos.length === 0 ? 0.4 : 1 }}>
+                  <IcoDownload /> CSV
+                </button>
+                {/* Enriquecer emails */}
+                <button onClick={enriquecerEmails} disabled={enriqueciendo || buscando} className="ab"
+                  style={{ ...ghostBtn, color: enriqueciendo ? '#71717a' : '#a78bfa', borderColor: 'rgba(139,92,246,.2)', opacity: enriqueciendo ? 0.6 : 1 }}>
+                  {enriqueciendo ? <><Spinner />Buscando...</> : <><IcoSparkle />Enriquecer</>}
+                </button>
+                {/* Buscar clientes */}
+                <button onClick={buscarClientes} disabled={buscando || enviando} className="ab"
+                  style={{ ...gradBtn, opacity: buscando || enviando ? 0.55 : 1, cursor: buscando || enviando ? 'not-allowed' : 'pointer' }}>
+                  {buscando ? <><Spinner />Buscando...</> : <><IcoSearch />Buscar clientes</>}
+                </button>
+              </div>
             )}
 
             {vista === 'ajustes' && (
@@ -318,34 +423,69 @@ function DashboardInner() {
 
           {/* ── DASHBOARD VIEW ── */}
           {vista === 'dashboard' && (
-            <div className="fu" style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div className="fu" style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Live activity notifications */}
+              {notifs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {notifs.map(n => (
+                    <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'rgba(14,165,233,.07)', border: '1px solid rgba(14,165,233,.2)', borderRadius: 12, animation: 'notifIn .3s ease both' }}>
+                      <IcoBell />
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#0ea5e9', flexShrink: 0, boxShadow: '0 0 6px #0ea5e9' }} />
+                      <p style={{ fontSize: 13.5, color: '#bae6fd', margin: 0, flex: 1 }}>
+                        <strong>{decodeHtml(n.nombre)}</strong>
+                        {n.estado === 'abierto' ? ' abrió tu email' : ' respondió'}
+                        {n.ts && <span style={{ color: '#64748b', marginLeft: 6 }}>{tiempoRelativo(n.ts)}</span>}
+                      </p>
+                      {n.telefono && (
+                        <a href={`tel:${n.telefono}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(16,185,129,.15)', border: '1px solid rgba(16,185,129,.3)', color: '#34d399', fontSize: 12.5, fontWeight: 600 }}>
+                          <IcoPhone /> Llamar ahora
+                        </a>
+                      )}
+                      <button onClick={() => setNotifs(prev => prev.filter(x => x.id !== n.id))}
+                        style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Stat cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
                 {([
-                  { label: 'Total leads',      value: stats.total,         sub: null,                                                                          icon: '🎯', ac: '#8b5cf6', gl: 'rgba(139,92,246,.15)', br: 'rgba(139,92,246,.22)', pct: 100 },
-                  { label: 'Emails enviados',  value: stats.email_enviado, sub: stats.email_enviado > 0 ? `${stats.nuevos} sin contactar` : null,              icon: '📤', ac: '#06b6d4', gl: 'rgba(6,182,212,.13)',   br: 'rgba(6,182,212,.2)',   pct: stats.total > 0 ? (stats.email_enviado / stats.total) * 100 : 0 },
-                  { label: 'Abrieron email',   value: stats.abiertos,      sub: stats.email_enviado > 0 ? `${Math.round((stats.abiertos / Math.max(stats.email_enviado,1))*100)}% tasa apertura` : null, icon: '👁', ac: '#0ea5e9', gl: 'rgba(14,165,233,.13)', br: 'rgba(14,165,233,.2)',  pct: stats.email_enviado > 0 ? (stats.abiertos / stats.email_enviado) * 100 : 0 },
-                  { label: 'Respondieron',     value: stats.respondio,     sub: stats.abiertos > 0 ? `${Math.round((stats.respondio / Math.max(stats.abiertos,1))*100)}% de abiertos` : null,          icon: '🏆', ac: '#10b981', gl: 'rgba(16,185,129,.13)', br: 'rgba(16,185,129,.2)',  pct: stats.email_enviado > 0 ? (stats.respondio / stats.email_enviado) * 100 : 0 },
+                  { label: 'Total leads',     value: stats.total,         sub: null,                                                                                                                                     icon: '🎯', ac: '#8b5cf6', gl: 'rgba(139,92,246,.15)', br: 'rgba(139,92,246,.22)', pct: 100 },
+                  { label: 'Emails enviados', value: stats.email_enviado, sub: stats.email_enviado > 0 ? `${stats.nuevos} sin contactar` : null,                                                                         icon: '📤', ac: '#06b6d4', gl: 'rgba(6,182,212,.13)',   br: 'rgba(6,182,212,.2)',   pct: stats.total > 0 ? (stats.email_enviado / stats.total) * 100 : 0 },
+                  { label: 'Abrieron email',  value: stats.abiertos,      sub: stats.email_enviado > 0 ? `${Math.round((stats.abiertos / Math.max(stats.email_enviado, 1)) * 100)}% tasa apertura` : null,              icon: '👁', ac: '#0ea5e9', gl: 'rgba(14,165,233,.13)', br: 'rgba(14,165,233,.2)',  pct: stats.email_enviado > 0 ? (stats.abiertos / stats.email_enviado) * 100 : 0 },
+                  { label: 'Respondieron',    value: stats.respondio,     sub: stats.abiertos > 0 ? `${Math.round((stats.respondio / Math.max(stats.abiertos, 1)) * 100)}% de abiertos` : null,                        icon: '🏆', ac: '#10b981', gl: 'rgba(16,185,129,.13)', br: 'rgba(16,185,129,.2)',  pct: stats.email_enviado > 0 ? (stats.respondio / stats.email_enviado) * 100 : 0 },
                 ]).map((s, i) => (
                   <div key={s.label} className="sc fu" style={{ background: `linear-gradient(145deg,rgba(255,255,255,.03) 0%,${s.gl} 100%)`, border: `1px solid ${s.br}`, borderRadius: 16, padding: '20px 20px 16px', animationDelay: `${i * 0.06}s` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                       <div style={{ width: 38, height: 38, borderRadius: 11, background: s.gl, border: `1px solid ${s.br}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19 }}>{s.icon}</div>
-                      {s.value > 0 && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: '#10b981' }}>
-                          <IcoTrend /> +{s.value}
-                        </span>
-                      )}
+                      {s.value > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: '#10b981' }}><IcoTrend /> +{s.value}</span>}
                     </div>
                     <div style={{ fontSize: 38, fontWeight: 800, color: '#fff', letterSpacing: '-1.5px', lineHeight: 1, marginBottom: 5, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
                     <div style={{ fontSize: 12.5, color: '#71717a', fontWeight: 500, marginBottom: s.sub ? 4 : 14 }}>{s.label}</div>
                     {s.sub && <div style={{ fontSize: 11, color: '#3f3f46', marginBottom: 10 }}>{s.sub}</div>}
                     <div style={{ height: 3, background: 'rgba(255,255,255,.05)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 2, background: `linear-gradient(90deg,${s.gl.replace('.13','.6')},${s.ac})`, width: `${Math.min(100, Math.max(s.pct, s.value > 0 ? 5 : 0))}%`, transition: 'width .8s ease' }} />
+                      <div style={{ height: '100%', borderRadius: 2, background: `linear-gradient(90deg,${s.gl.replace('.13', '.6')},${s.ac})`, width: `${Math.min(100, Math.max(s.pct, s.value > 0 ? 5 : 0))}%`, transition: 'width .8s ease' }} />
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Analytics chart */}
+              {stats.email_enviado > 0 && (
+                <div style={{ background: 'rgba(255,255,255,.02)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 16, padding: '20px 24px' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 16px' }}>Aperturas últimos 7 días</p>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 56 }}>
+                    {opensByDay.map((d, i) => (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
+                        <div title={`${d.abiertos} aperturas`} style={{ width: '100%', borderRadius: '4px 4px 0 0', background: d.abiertos > 0 ? 'linear-gradient(180deg,#0ea5e9,#0284c7)' : 'rgba(255,255,255,.05)', height: `${Math.max((d.abiertos / maxBar) * 44, d.abiertos > 0 ? 6 : 3)}px`, transition: 'height .5s ease', boxShadow: d.abiertos > 0 ? '0 0 8px rgba(14,165,233,.3)' : 'none' }} />
+                        <span style={{ fontSize: 9.5, color: '#3f3f46', fontWeight: 500, textTransform: 'capitalize' }}>{d.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* CTA enviar */}
               {stats.nuevos > 0 && (
@@ -368,22 +508,33 @@ function DashboardInner() {
                 </div>
               )}
 
-              {/* Tabs + tabla */}
+              {/* Tabs + tabla/kanban */}
               <div>
-                {/* Tabs */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid rgba(255,255,255,.06)', marginBottom: 0 }}>
-                  {([
-                    { key: 'todos' as const,     label: 'Todos',            count: stats.total - stats.bajas },
-                    { key: 'nuevos' as const,    label: 'Sin contactar',    count: stats.nuevos },
-                    { key: 'abiertos' as const,  label: '👁 Abrieron',      count: stats.abiertos },
-                    { key: 'respondio' as const, label: 'Respondieron',     count: stats.respondio },
-                  ]).map(t => (
-                    <button key={t.key} onClick={() => setTab(t.key)} className="tb"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, border: 'none', borderBottom: `2px solid ${tab === t.key ? '#8b5cf6' : 'transparent'}`, marginBottom: -1, background: 'transparent', cursor: 'pointer', color: tab === t.key ? '#e4e4e7' : '#52525b' }}>
-                      {t.label}
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: tab === t.key ? 'rgba(139,92,246,.2)' : 'rgba(255,255,255,.05)', color: tab === t.key ? '#c4b5fd' : '#52525b' }}>{t.count}</span>
-                    </button>
-                  ))}
+                {/* Row: tabs + view toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,.06)', marginBottom: 0 }}>
+                  <div style={{ display: 'flex' }}>
+                    {([
+                      { key: 'todos' as const,    label: 'Todos',         count: stats.total - stats.bajas },
+                      { key: 'nuevos' as const,   label: 'Sin contactar', count: stats.nuevos },
+                      { key: 'abiertos' as const, label: '👁 Abrieron',   count: stats.abiertos },
+                      { key: 'respondio' as const,label: 'Respondieron',  count: stats.respondio },
+                    ]).map(t => (
+                      <button key={t.key} onClick={() => setTab(t.key)} className="tb"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, border: 'none', borderBottom: `2px solid ${tab === t.key ? '#8b5cf6' : 'transparent'}`, marginBottom: -1, background: 'transparent', cursor: 'pointer', color: tab === t.key ? '#e4e4e7' : '#52525b' }}>
+                        {t.label}
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: tab === t.key ? 'rgba(139,92,246,.2)' : 'rgba(255,255,255,.05)', color: tab === t.key ? '#c4b5fd' : '#52525b' }}>{t.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {/* View toggle */}
+                  <div style={{ display: 'flex', gap: 4, paddingBottom: 6 }}>
+                    {([{ v: 'tabla', icon: <IcoTable />, label: 'Tabla' }, { v: 'kanban', icon: <IcoKanban />, label: 'Kanban' }] as const).map(btn => (
+                      <button key={btn.v} onClick={() => setVistaTabla(btn.v)} className="ab"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7, border: `1px solid ${vistaTabla === btn.v ? 'rgba(139,92,246,.35)' : 'rgba(255,255,255,.07)'}`, background: vistaTabla === btn.v ? 'rgba(139,92,246,.1)' : 'transparent', color: vistaTabla === btn.v ? '#c4b5fd' : '#52525b', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                        {btn.icon} {btn.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {filtrados.length === 0 ? (
@@ -398,7 +549,70 @@ function DashboardInner() {
                       {buscando ? <><Spinner />Buscando...</> : <><IcoSearch />Buscar ahora</>}
                     </button>
                   </div>
+
+                ) : vistaTabla === 'kanban' ? (
+                  /* ── KANBAN VIEW ── */
+                  <div style={{ border: '1px solid rgba(255,255,255,.07)', borderTop: 'none', borderRadius: '0 0 14px 14px', padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, overflowX: 'auto' }}>
+                    {kanbanCols.map(col => {
+                      const cards = contactos.filter(c => col.estados.includes(c.estado) && c.estado !== 'baja')
+                      return (
+                        <div key={col.key}>
+                          {/* Column header */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10, padding: '0 4px' }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: col.color, flexShrink: 0 }} />
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{col.label}</span>
+                            <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#3f3f46', background: 'rgba(255,255,255,.04)', borderRadius: 4, padding: '1px 6px' }}>{cards.length}</span>
+                          </div>
+                          {/* Cards */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 80 }}>
+                            {cards.map(c => {
+                              const cfg = EC[c.estado] || EC.nuevo
+                              const a = av(c.nombre)
+                              const ini = initials(decodeHtml(c.nombre))
+                              return (
+                                <div key={c.id} className="kc" style={{ background: 'rgba(255,255,255,.025)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 12, padding: '12px 12px 10px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: a.bg, border: `1px solid ${a.br}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: a.tx }}>{ini}</div>
+                                    <div style={{ minWidth: 0 }}>
+                                      <p style={{ fontSize: 12.5, fontWeight: 600, color: '#e4e4e7', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{decodeHtml(c.nombre)}</p>
+                                      <p style={{ fontSize: 11, color: '#52525b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.ciudad}</p>
+                                    </div>
+                                  </div>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 5, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.bc}` }}>
+                                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: cfg.dot }} />{cfg.label}
+                                  </span>
+                                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                    {c.email_encontrado && (
+                                      <a href={`mailto:${c.email_encontrado}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#93c5fd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        <IcoAt />{c.email_encontrado}
+                                      </a>
+                                    )}
+                                    {c.telefono && (
+                                      <a href={`tel:${c.telefono}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#86efac' }}>
+                                        <IcoPhone />{c.telefono}
+                                      </a>
+                                    )}
+                                  </div>
+                                  {!['respondio', 'baja', 'nuevo'].includes(c.estado) && (
+                                    <button onClick={() => marcarRespondio(c.id)} title="Marcar como respondió"
+                                      style={{ marginTop: 8, width: '100%', padding: '4px 0', borderRadius: 6, border: '1px solid rgba(16,185,129,.2)', background: 'rgba(16,185,129,.05)', color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                      ✓ Respondió
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                            {cards.length === 0 && (
+                              <div style={{ border: '1px dashed rgba(255,255,255,.05)', borderRadius: 10, padding: '20px 12px', textAlign: 'center', color: '#27272a', fontSize: 12 }}>vacío</div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
                 ) : (
+                  /* ── TABLE VIEW ── */
                   <div style={{ border: '1px solid rgba(255,255,255,.07)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden' }}>
                     {/* Table head */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 148px 110px 210px 74px 68px 40px', padding: '10px 18px', borderBottom: '1px solid rgba(255,255,255,.06)', background: 'rgba(255,255,255,.02)' }}>
@@ -441,14 +655,14 @@ function DashboardInner() {
                           {/* Contacto */}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             {c.email_encontrado && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#93c5fd' }}>
+                              <a href={`mailto:${c.email_encontrado}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#93c5fd', textDecoration: 'none' }}>
                                 <IcoAt /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email_encontrado}</span>
-                              </span>
+                              </a>
                             )}
                             {c.telefono && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#86efac' }}>
+                              <a href={`tel:${c.telefono}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#86efac', textDecoration: 'none' }}>
                                 <IcoPhone />{c.telefono}
-                              </span>
+                              </a>
                             )}
                             {c.web && (
                               <a href={c.web} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#c4b5fd', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -477,9 +691,7 @@ function DashboardInner() {
                           {/* Acción: marcar respondió */}
                           <div style={{ display: 'flex', justifyContent: 'center' }}>
                             {!['respondio', 'baja', 'nuevo'].includes(c.estado) && (
-                              <button
-                                onClick={() => marcarRespondio(c.id)}
-                                title="Marcar como respondió"
+                              <button onClick={() => marcarRespondio(c.id)} title="Marcar como respondió"
                                 style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid rgba(16,185,129,.25)', background: 'rgba(16,185,129,.06)', color: '#34d399', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}
                                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(16,185,129,.18)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(16,185,129,.5)' }}
                                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(16,185,129,.06)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(16,185,129,.25)' }}
@@ -499,7 +711,6 @@ function DashboardInner() {
           {vista === 'ajustes' && formAjustes && (
             <div className="fu" style={{ padding: '28px 32px' }}>
               <p style={{ fontSize: 12.5, color: '#52525b', marginBottom: 28 }}>✦ Los cambios se aplican a los próximos emails. Los ya enviados no se modifican.</p>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 32px' }}>
                 <div>
                   <label style={lbl}>Nombre del negocio</label>
@@ -522,12 +733,12 @@ function DashboardInner() {
                   <input type="email" placeholder="tu@empresa.com" value={formAjustes.email ?? ''} onChange={e => setFormAjustes(f => f ? { ...f, email: e.target.value } : f)} style={inp} />
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={lbl}>Cliente ideal</label>
-                  <textarea rows={3} placeholder="Quiénes son tus clientes…" value={formAjustes.cliente_ideal ?? ''} onChange={e => setFormAjustes(f => f ? { ...f, cliente_ideal: e.target.value } : f)} style={{ ...inp, resize: 'none' }} />
+                  <label style={lbl}>Cliente ideal <span style={{ color: '#3f3f46', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— 1-2 palabras clave para la búsqueda</span></label>
+                  <textarea rows={2} placeholder="Ej: Farmacia, Restaurante, Gestoría (1-2 palabras, más específico = mejores resultados)" value={formAjustes.cliente_ideal ?? ''} onChange={e => setFormAjustes(f => f ? { ...f, cliente_ideal: e.target.value } : f)} style={{ ...inp, resize: 'none' }} />
                 </div>
                 <div>
-                  <label style={lbl}>Teléfono WhatsApp</label>
-                  <input type="tel" placeholder="612 345 678 (opcional)" value={formAjustes.telefono ?? ''} onChange={e => setFormAjustes(f => f ? { ...f, telefono: e.target.value } : f)} style={inp} />
+                  <label style={lbl}>Teléfono WhatsApp <span style={{ color: '#3f3f46', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— alertas de aperturas</span></label>
+                  <input type="tel" placeholder="+34 612 345 678" value={formAjustes.telefono ?? ''} onChange={e => setFormAjustes(f => f ? { ...f, telefono: e.target.value } : f)} style={inp} />
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={lbl}>Tono de emails</label>
@@ -537,8 +748,7 @@ function DashboardInner() {
                       { v: 'profesional', l: 'Profesional', e: '💼', d: 'Serio y formal' },
                       { v: 'divertido',   l: 'Divertido',   e: '🎯', d: 'Creativo y fresco' },
                     ].map(t => (
-                      <button key={t.v} onClick={() => setFormAjustes(f => f ? { ...f, tono: t.v } : f)}
-                        className="tn"
+                      <button key={t.v} onClick={() => setFormAjustes(f => f ? { ...f, tono: t.v } : f)} className="tn"
                         style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, padding: '14px 18px', borderRadius: 12, border: formAjustes.tono === t.v ? '1px solid rgba(139,92,246,.5)' : '1px solid rgba(255,255,255,.07)', background: formAjustes.tono === t.v ? 'rgba(139,92,246,.1)' : 'rgba(255,255,255,.02)', cursor: 'pointer', minWidth: 150, boxShadow: formAjustes.tono === t.v ? '0 0 0 1px rgba(139,92,246,.15)' : 'none' }}>
                         <span style={{ fontSize: 22 }}>{t.e}</span>
                         <span style={{ fontSize: 13.5, fontWeight: 600, color: formAjustes.tono === t.v ? '#c4b5fd' : '#a1a1aa' }}>{t.l}</span>

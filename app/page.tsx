@@ -127,6 +127,10 @@ export default function ChatOnboarding() {
   const [botTyping, setBotTyping] = useState(false)
   const [guardando,   setGuardando]   = useState(false)
   const [analizando,  setAnalizando]  = useState(false)
+  const [showMagic, setShowMagic] = useState(false)
+  const [magicEmail, setMagicEmail] = useState('')
+  const [magicSent, setMagicSent]   = useState(false)
+  const [magicLoading, setMagicLoading] = useState(false)
   const [form,     setForm]     = useState<Form>({
     nombre: '', sector: '', descripcion: '', ciudad: '',
     cliente_ideal: '', tono: 'cercano', email: '', telefono: '',
@@ -247,6 +251,20 @@ export default function ChatOnboarding() {
   }
 
   /* ── Activar Captia ── */
+  const enviarMagicLink = async () => {
+    if (!magicEmail.includes('@')) return
+    setMagicLoading(true)
+    try {
+      await fetch('/api/auth/magic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: magicEmail }),
+      })
+      setMagicSent(true)
+    } catch { /* show sent anyway */ setMagicSent(true) }
+    finally { setMagicLoading(false) }
+  }
+
   const activar = async () => {
     setGuardando(true)
     setMsgs(prev => [...prev, newMsg('bot', '⚡ Configurando tu cuenta...')])
@@ -529,7 +547,34 @@ export default function ChatOnboarding() {
             <span className="live-dot" />
             100% Gratis
           </div>
+          <button onClick={() => { setShowMagic(v => !v); setMagicSent(false); setMagicEmail('') }}
+            style={{ marginLeft: 12, background: 'transparent', border: '1px solid rgba(255,255,255,.1)', borderRadius: 8, padding: '5px 12px', fontSize: 12, color: '#71717a', cursor: 'pointer', transition: 'all .15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(139,92,246,.4)'; (e.currentTarget as HTMLButtonElement).style.color = '#c4b5fd' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,.1)'; (e.currentTarget as HTMLButtonElement).style.color = '#71717a' }}>
+            Ya tengo cuenta
+          </button>
         </header>
+
+        {/* Magic link panel */}
+        {showMagic && (
+          <div style={{ borderBottom: '1px solid rgba(255,255,255,.06)', background: 'rgba(139,92,246,.04)', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 10, backdropFilter: 'blur(16px)' }}>
+            {magicSent ? (
+              <p style={{ fontSize: 13.5, color: '#6ee7b7', margin: 0 }}>✓ Revisa tu email — te hemos enviado el enlace de acceso a tu panel.</p>
+            ) : (
+              <>
+                <span style={{ fontSize: 13, color: '#71717a', whiteSpace: 'nowrap' }}>Acceder con tu email:</span>
+                <input type="email" value={magicEmail} onChange={e => setMagicEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') enviarMagicLink() }}
+                  placeholder="tu@empresa.com"
+                  style={{ flex: 1, maxWidth: 280, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 8, padding: '7px 12px', fontSize: 13.5, color: '#f4f4f5', outline: 'none', fontFamily: 'inherit' }} />
+                <button onClick={enviarMagicLink} disabled={magicLoading || !magicEmail.includes('@')}
+                  style={{ padding: '7px 16px', borderRadius: 8, background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: magicLoading || !magicEmail.includes('@') ? 0.5 : 1 }}>
+                  {magicLoading ? '...' : 'Enviar enlace →'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* ── Chat ── */}
         <div className="chat-area">

@@ -234,7 +234,7 @@ async function extraerNegociosDeDirectorio(url: string, ciudad: string, sector: 
 /* ═══════════════════════════════════════════════════════
    EMAIL EXTRACTOR
    ═══════════════════════════════════════════════════════ */
-async function extraerEmailDeWeb(url: string): Promise<string | null> {
+export async function extraerEmailDeWeb(url: string): Promise<string | null> {
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 6000)

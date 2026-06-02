@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       const db = getSupabaseAdmin()
       const { data: updated } = await db
         .from('captia_contactos')
-        .update({ estado: 'abierto' })
+        .update({ estado: 'abierto', ultimo_contacto: new Date().toISOString() })
         .eq('id', cid)
         .in('estado', ['email_enviado', 'seguimiento_1', 'seguimiento_2'])
         .select('nombre, negocio_id')
