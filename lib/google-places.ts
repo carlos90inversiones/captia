@@ -110,151 +110,171 @@ async function buscarEnOverpass(osmKeys: Array<[string, string | null]>, lat: nu
 }
 
 /* ═══════════════════════════════════════════════════════
-   FALLBACK — DuckDuckGo + scraping de directorios
+   NOMINATIM TEXTO — búsqueda universal por nombre en OSM
+   Funciona para CUALQUIER sector sin configuración previa
    ═══════════════════════════════════════════════════════ */
-async function buscarEnDirectorios(sector: string, ciudad: string, max: number): Promise<NegocioEncontrado[]> {
-  console.log(`[DDG fallback] Buscando "${sector}" en "${ciudad}"`)
+async function buscarEnNominatimTexto(sector: string, ciudad: string, max: number): Promise<NegocioEncontrado[]> {
+  const STOP = new Set(['para', 'como', 'este', 'esta', 'una', 'los', 'las', 'que', 'del', 'con', 'empresa', 'negocio', 'pequeño', 'grande', 'servicios', 'necesiten', 'quieran', 'buscan', 'pymes', 'autonomos', 'autónomos'])
+  const palabras = sector
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .split(/[\s,\/]+/)
+    .filter(w => w.length > 3 && !STOP.has(w))
+    .slice(0, 2)
+  if (!palabras.length) return []
 
-  // 1. Buscar en DuckDuckGo
-  const query = `${sector} ${ciudad} directorio`
-  const body = new URLSearchParams({ q: query, kl: 'es-es', ia: 'web' })
-  let ddgHtml = ''
+  const q = `${palabras.join(' ')} ${ciudad}`
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&extratags=1&limit=${Math.min(max, 50)}&dedupe=1`
+
   try {
-    const r = await fetch('https://html.duckduckgo.com/html/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html',
-        'Accept-Language': 'es-ES,es;q=0.9',
-        'Referer': 'https://duckduckgo.com/',
-      },
-      body: body.toString(),
+    await new Promise(r => setTimeout(r, 300))
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Captia/1.0 (captia@marsof.es)' },
       signal: AbortSignal.timeout(12000),
     })
-    ddgHtml = await r.text()
-  } catch (e) {
-    console.log('[DDG] Error fetching:', e)
+    if (!res.ok) return []
+    const data = await res.json() as Record<string, unknown>[]
+    console.log(`[Nominatim texto] ${data.length} para "${q}"`)
+
+    return data.map(place => {
+      const nombre = String(place.name || String(place.display_name || '').split(',')[0]).trim()
+      if (!nombre || nombre.length < 3) return null
+      const address = (place.address || {}) as Record<string, string>
+      const calle = [address.road, address.house_number].filter(Boolean).join(' ')
+      const ciudadNeg = address.city || address.town || address.village || address.municipality || ciudad
+      const extratags = (place.extratags || {}) as Record<string, string>
+      const telefono = extratags.phone || extratags['contact:phone'] || null
+      const web = extratags.website || extratags['contact:website'] || extratags.url || null
+      const email = extratags.email || extratags['contact:email'] || null
+      return {
+        place_id: `nom-${place.osm_type}-${place.osm_id}`,
+        nombre,
+        direccion: calle ? `${calle}, ${ciudadNeg}` : ciudadNeg,
+        ciudad: ciudadNeg,
+        telefono: telefono ? formatTelefonoPa(String(telefono)) : null,
+        web: typeof web === 'string' && web.startsWith('http') ? web : null,
+        email_encontrado: typeof email === 'string' && email.includes('@') ? email.toLowerCase() : null,
+        rating: null,
+        sector,
+      } as NegocioEncontrado
+    }).filter((n): n is NegocioEncontrado => n !== null)
+  } catch (err) {
+    console.log(`[Nominatim texto] Error: ${String(err).slice(0, 80)}`)
     return []
   }
+}
 
-  // 2. Extraer URLs de resultados
-  const rawUrls = [...ddgHtml.matchAll(/href="(https?:\/\/[^"]+)"/g)]
-    .map(m => m[1])
-    .filter(u => !u.includes('duckduckgo') && !u.includes('duck.com') && u.startsWith('http'))
-  const urls = [...new Set(rawUrls)].slice(0, 6)
-  console.log(`[DDG] ${urls.length} URLs encontradas: ${urls.slice(0, 3).join(', ')}`)
-
-  // 3. Para cada URL, intentar extraer negocios
+/* ═══════════════════════════════════════════════════════
+   DDG SNIPPETS — extrae negocios directamente de los
+   snippets del SERP, sin scraping de webs externas
+   ═══════════════════════════════════════════════════════ */
+async function buscarSnippetsDDG(sector: string, ciudad: string, max: number): Promise<NegocioEncontrado[]> {
   const negocios: NegocioEncontrado[] = []
   const seen = new Set<string>()
 
-  for (const url of urls) {
+  const queries = [
+    `${sector} ${ciudad} teléfono contacto`,
+    `mejores ${sector} en ${ciudad}`,
+  ]
+
+  for (const query of queries) {
     if (negocios.length >= max) break
     try {
-      const extracted = await extraerNegociosDeDirectorio(url, ciudad, sector)
-      for (const neg of extracted) {
-        const key = neg.nombre.toLowerCase()
-        if (!seen.has(key)) {
-          seen.add(key)
-          negocios.push(neg)
-        }
+      const body = new URLSearchParams({ q: query, kl: 'es-es', ia: 'web' })
+      const r = await fetch('https://html.duckduckgo.com/html/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html',
+          'Accept-Language': 'es-ES,es;q=0.9',
+          'Referer': 'https://duckduckgo.com/',
+        },
+        body: body.toString(),
+        signal: AbortSignal.timeout(12000),
+      })
+      if (!r.ok) continue
+      const html = await r.text()
+
+      // Extraer bloques resultado: título + snippet
+      const blocks = [...html.matchAll(
+        /class="result__title"[\s\S]*?<a[^>]+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi
+      )]
+
+      for (const blk of blocks) {
         if (negocios.length >= max) break
+        const href = blk[1]
+        const title = decodeHtmlEntities(blk[2].replace(/<[^>]+>/g, '').trim())
+        const snippet = decodeHtmlEntities(blk[3].replace(/<[^>]+>/g, '').trim())
+        if (!title || title.length < 4) continue
+        if (/wikipedia|youtube|facebook|twitter|instagram|yelp\.com|paginasamarillas/i.test(href)) continue
+
+        const combined = title + ' ' + snippet
+        // Teléfonos españoles en snippet
+        const phones = combined.match(/(?<!\d)(?:\+34[\s.-]?)?(?:6\d{2}|7[0-9]\d|8[0-9]\d|9\d{2})[\s.-]?\d{3}[\s.-]?\d{3}(?!\d)/g) || []
+        const phone = phones[0] ? formatTelefonoPa(phones[0].replace(/\s/g, '')) : null
+        const emailM = combined.match(/\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/)
+        const email = emailM ? emailM[0].toLowerCase() : null
+
+        const esTituloBusiness = !/directorio|lista|encuentr|busca|nuestro|todos|mejor\s|los\s\d|mejores\s\d|top\s\d/i.test(title)
+
+        if (esTituloBusiness && title.length < 80) {
+          const key = title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
+          if (!seen.has(key)) {
+            seen.add(key)
+            negocios.push({
+              place_id: `ddg-${Buffer.from(title + ciudad).toString('hex').slice(0, 16)}`,
+              nombre: title,
+              direccion: ciudad,
+              ciudad,
+              telefono: phone,
+              web: href.startsWith('http') && !href.includes('duckduckgo') ? href : null,
+              email_encontrado: email,
+              rating: null,
+              sector,
+            })
+          }
+        } else {
+          // Directorio: intentar extraer líneas individuales del snippet
+          const lineas = snippet.split(/[·\|—\n;]/).map(l => l.trim()).filter(l => l.length > 4 && l.length < 80)
+          for (const linea of lineas.slice(0, 6)) {
+            if (negocios.length >= max) break
+            if (!/^[A-ZÁÉÍÓÚÑ]/.test(linea)) continue
+            if (/directorio|lista|encuentr|busca|nuestro|todos|varios|ver más/i.test(linea)) continue
+            const linPhone = linea.match(/(?:6\d{2}|7[0-9]\d|8[0-9]\d|9\d{2})[\s.-]?\d{3}[\s.-]?\d{3}/)
+            const nombre = linea.replace(/\s*\d[\d\s.-]{7,}\s*$/, '').trim()
+            if (!nombre || nombre.length < 4) continue
+            const key = nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
+            if (!seen.has(key)) {
+              seen.add(key)
+              negocios.push({
+                place_id: `ddg-s-${Buffer.from(nombre + ciudad).toString('hex').slice(0, 16)}`,
+                nombre,
+                direccion: ciudad,
+                ciudad,
+                telefono: linPhone ? formatTelefonoPa(linPhone[0]) : null,
+                web: null,
+                email_encontrado: null,
+                rating: null,
+                sector,
+              })
+            }
+          }
+        }
       }
-    } catch (e) {
-      console.log(`[DDG] Error scraping ${url}:`, String(e).slice(0, 80))
+      console.log(`[DDG snippets] "${query}": ${negocios.length} acumulados`)
+    } catch (err) {
+      console.log(`[DDG snippets] Error: ${String(err).slice(0, 80)}`)
     }
   }
-
   return negocios
 }
 
 function decodeHtmlEntities(str: string): string {
   return str
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-}
-
-async function extraerNegociosDeDirectorio(url: string, ciudad: string, sector: string): Promise<NegocioEncontrado[]> {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html',
-      'Accept-Language': 'es-ES,es;q=0.9',
-    },
-    signal: AbortSignal.timeout(8000),
-  })
-  if (!res.ok) return []
-  const html = await res.text()
-  const hostname = new URL(url).hostname
-
-  // Detectar si es un directorio (tiene múltiples H2/H3 con links a negocios)
-  const h2h3 = [...html.matchAll(/<h[23][^>]*>([^<]{5,80})<\/h[23]>/gi)].map(m => m[1].trim())
-  if (h2h3.length < 3) return [] // no parece directorio
-
-  const negocios: NegocioEncontrado[] = []
-
-  // Patrón 1: link externo + nombre en el mismo bloque (como gestorias24.com)
-  const linkNamePattern = /href="(https?:\/\/(?![^"]*(?:duckduck|google|facebook|twitter|instagram|linkedin|yelp|tripadvisor|gestorias24|gestorias\.es|maps\.google))[^"]{10,80})"[^>]*>[\s\S]{0,200}?<div[^>]*>([^<]{5,70})<\/div>/gi
-  const matches = [...html.matchAll(linkNamePattern)]
-
-  for (const m of matches.slice(0, 25)) {
-    const web = m[1].trim()
-    const nombre = decodeHtmlEntities(m[2].replace(/\s+/g, ' ').trim())
-    if (!nombre || nombre.length < 4) continue
-    if (/^(inicio|home|blog|contacto|sobre|servicios|aviso|política|ver más|siguiente)/i.test(nombre)) continue
-
-    const emailDeWeb = await extraerEmailDeWeb(web)
-    negocios.push({
-      place_id: `dir-${hostname}-${Buffer.from(nombre).toString('hex').slice(0, 12)}`,
-      nombre,
-      direccion: ciudad,
-      ciudad,
-      telefono: null,
-      web,
-      email_encontrado: emailDeWeb,
-      rating: null,
-      sector,
-    })
-  }
-
-  // Patrón 2: JSON-LD con LocalBusiness o ItemList
-  const jsonLdBlocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi)]
-  for (const block of jsonLdBlocks) {
-    try {
-      const data = JSON.parse(block[1])
-      const items = [data, ...(data['@graph'] || []), ...(Array.isArray(data) ? data : [])]
-      for (const item of items) {
-        if (item['@type'] === 'LocalBusiness' || item['@type']?.includes('Business')) {
-          const nombre = decodeHtmlEntities(item.name?.trim() || '')
-          if (!nombre || nombre.length < 4) continue
-          const web = item.url || item.sameAs || null
-          const telefono = item.telephone || null
-          const direccion = item.address?.streetAddress || item.address || ciudad
-          const emailDes = item.email || (web ? await extraerEmailDeWeb(web) : null)
-          negocios.push({
-            place_id: `dir-${hostname}-${Buffer.from(nombre).toString('hex').slice(0, 12)}`,
-            nombre,
-            direccion: typeof direccion === 'string' ? direccion : ciudad,
-            ciudad,
-            telefono,
-            web: typeof web === 'string' ? web : null,
-            email_encontrado: emailDes,
-            rating: item.aggregateRating?.ratingValue ?? null,
-            sector,
-          })
-        }
-      }
-    } catch { /* ignorar JSON mal formado */ }
-  }
-
-  console.log(`[DIR] ${url.split('/')[2]}: ${negocios.length} negocios extraídos`)
-  return negocios
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -605,9 +625,9 @@ export async function buscarNegociosEnGoogleMaps(params: {
 }): Promise<NegocioEncontrado[]> {
   const { sector, ciudad, radio, maxResultados = 20 } = params
 
-  // 1. Correr OSM, Páginas Amarillas y Yelp en paralelo
-  const [osmNegocios, paNegocios, yelpNegocios] = await Promise.all([
-    // Track OSM/Overpass
+  // 1. Tres fuentes en paralelo — todas sin límite de sector
+  const [osmNegocios, nomNegocios, yelpNegocios, paNegocios] = await Promise.all([
+    // OSM/Overpass — rápido y preciso para sectores configurados
     (async (): Promise<NegocioEncontrado[]> => {
       const osmKeys = getSectorOsmKeys(sector)
       if (!osmKeys) return []
@@ -615,7 +635,7 @@ export async function buscarNegociosEnGoogleMaps(params: {
       if (!coords) return []
       const rawEls = await buscarEnOverpass(osmKeys, coords.lat, coords.lon, radio, maxResultados)
       const elements = rawEls.filter(el => ((el.tags || {}) as Record<string, string>).name?.trim()).slice(0, maxResultados)
-      console.log(`[Overpass] ${elements.length} negocios para "${sector}" en ${ciudad}`)
+      console.log(`[Overpass] ${elements.length} para "${sector}" en ${ciudad}`)
       const negocios: NegocioEncontrado[] = []
       for (const el of elements) {
         const neg = await osmElementToNegocio(el, sector, ciudad)
@@ -623,16 +643,18 @@ export async function buscarNegociosEnGoogleMaps(params: {
       }
       return negocios
     })(),
-    // Track Páginas Amarillas (graceful: si está bloqueado devuelve [])
-    buscarEnPaginasAmarillas(sector, ciudad, maxResultados),
-    // Track Yelp (solo si YELP_API_KEY está configurado)
+    // Nominatim texto — UNIVERSAL, cualquier sector, busca por nombre en OSM
+    buscarEnNominatimTexto(sector, ciudad, maxResultados),
+    // Yelp — solo si YELP_API_KEY configurado
     buscarEnYelp(sector, ciudad, radio, maxResultados),
+    // Páginas Amarillas — si no está bloqueado por WAF
+    buscarEnPaginasAmarillas(sector, ciudad, maxResultados),
   ])
 
-  // 2. Merge deduplicando por nombre — prioridad: OSM > Yelp > PA
+  // 2. Merge deduplicando — prioridad: Overpass > Nominatim > Yelp > PA
   const seen = new Set<string>()
   const merged: NegocioEncontrado[] = []
-  for (const neg of [...osmNegocios, ...yelpNegocios, ...paNegocios]) {
+  for (const neg of [...osmNegocios, ...nomNegocios, ...yelpNegocios, ...paNegocios]) {
     const key = neg.nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
     if (!seen.has(key)) {
       seen.add(key)
@@ -641,12 +663,23 @@ export async function buscarNegociosEnGoogleMaps(params: {
     if (merged.length >= maxResultados) break
   }
 
-  if (merged.length > 0) {
-    console.log(`[Captia] ${merged.length} total (OSM:${osmNegocios.length} + Yelp:${yelpNegocios.length} + PA:${paNegocios.length})`)
+  if (merged.length >= 5) {
+    console.log(`[Captia] ${merged.length} total (OSM:${osmNegocios.length} + Nom:${nomNegocios.length} + Yelp:${yelpNegocios.length} + PA:${paNegocios.length})`)
     return merged
   }
 
-  // 3. Fallback: DuckDuckGo + scraping de directorios
-  console.log(`[Captia] Sin resultados — usando fallback DuckDuckGo`)
-  return buscarEnDirectorios(sector, ciudad, maxResultados)
+  // 3. Si < 5 resultados: completar con snippets DDG (sin scraping externo)
+  console.log(`[Captia] Pocos resultados (${merged.length}) — completando con DDG snippets`)
+  const ddgNegocios = await buscarSnippetsDDG(sector, ciudad, maxResultados - merged.length)
+  for (const neg of ddgNegocios) {
+    const key = neg.nombre.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 25)
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push(neg)
+    }
+    if (merged.length >= maxResultados) break
+  }
+
+  console.log(`[Captia] Final: ${merged.length} negocios`)
+  return merged
 }
