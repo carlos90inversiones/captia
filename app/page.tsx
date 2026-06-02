@@ -73,7 +73,7 @@ const STEPS: Step[] = [
   {
     botMsg: '',
     field:  'cliente_ideal',
-    input:  { type: 'text', placeholder: 'Ej: Gestorías que necesiten digitalizar su negocio', multiline: true },
+    input:  { type: 'text', placeholder: 'Ej: Farmacia, Restaurante, Gestoría, Taller mecánico (1-2 palabras mejor)', multiline: true },
     next:   () => '¿Cómo quieres que suenen los emails que envía la IA?',
   },
   {

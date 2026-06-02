@@ -159,6 +159,18 @@ function DashboardInner() {
     finally { setEnviando(false) }
   }
 
+  const marcarRespondio = async (contactoId: string) => {
+    try {
+      await fetch('/api/contactos', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: contactoId, estado: 'respondio' }),
+      })
+      await cargarDatos()
+      showToast('ok', '¡Marcado como respondió! 🎉')
+    } catch { showToast('error', 'Error al actualizar.') }
+  }
+
   const guardarAjustes = async () => {
     if (!formAjustes || !negocioId) return
     setGuardandoAjustes(true)
@@ -389,8 +401,8 @@ function DashboardInner() {
                 ) : (
                   <div style={{ border: '1px solid rgba(255,255,255,.07)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden' }}>
                     {/* Table head */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 148px 110px 210px 74px 68px', padding: '10px 18px', borderBottom: '1px solid rgba(255,255,255,.06)', background: 'rgba(255,255,255,.02)' }}>
-                      {['NEGOCIO', 'ESTADO', 'CIUDAD', 'CONTACTO', 'RATING', 'FECHA'].map(h => (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 148px 110px 210px 74px 68px 40px', padding: '10px 18px', borderBottom: '1px solid rgba(255,255,255,.06)', background: 'rgba(255,255,255,.02)' }}>
+                      {['NEGOCIO', 'ESTADO', 'CIUDAD', 'CONTACTO', 'RATING', 'FECHA', ''].map(h => (
                         <span key={h} style={{ fontSize: 10.5, fontWeight: 700, color: '#3f3f46', letterSpacing: '0.07em' }}>{h}</span>
                       ))}
                     </div>
@@ -401,7 +413,7 @@ function DashboardInner() {
                       const ini = initials(decodeHtml(c.nombre))
                       return (
                         <div key={c.id} className="cr"
-                          style={{ display: 'grid', gridTemplateColumns: '1fr 148px 110px 210px 74px 68px', padding: '12px 18px', alignItems: 'center', borderBottom: idx < filtrados.length - 1 ? '1px solid rgba(255,255,255,.04)' : 'none', background: 'transparent' }}>
+                          style={{ display: 'grid', gridTemplateColumns: '1fr 148px 110px 210px 74px 68px 40px', padding: '12px 18px', alignItems: 'center', borderBottom: idx < filtrados.length - 1 ? '1px solid rgba(255,255,255,.04)' : 'none', background: 'transparent' }}>
 
                           {/* Negocio */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -460,6 +472,19 @@ function DashboardInner() {
                               ? <span style={{ fontSize: 11.5, color: '#52525b' }}>{new Date(c.ultimo_contacto).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
                               : <span style={{ fontSize: 12, color: '#27272a' }}>—</span>
                             }
+                          </div>
+
+                          {/* Acción: marcar respondió */}
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            {!['respondio', 'baja', 'nuevo'].includes(c.estado) && (
+                              <button
+                                onClick={() => marcarRespondio(c.id)}
+                                title="Marcar como respondió"
+                                style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid rgba(16,185,129,.25)', background: 'rgba(16,185,129,.06)', color: '#34d399', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(16,185,129,.18)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(16,185,129,.5)' }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(16,185,129,.06)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(16,185,129,.25)' }}
+                              >✓</button>
+                            )}
                           </div>
                         </div>
                       )
